@@ -200,12 +200,93 @@ class SumaMatricesWindow(_BaseMatrixWindow):
         self.num_edit = QLineEdit("2"); self.num_edit.setFixedWidth(60); self.num_edit.setAlignment(Qt.AlignCenter)
         self.lay.itemAt(1).layout().insertWidget(0, QLabel("Nº matrices:"))
         self.lay.itemAt(1).layout().insertWidget(1, self.num_edit)
+        self.scalars_container = QFrame()
+        self.scalars_container.setObjectName("ScalarsPanel")
+        self.scalars_container.setStyleSheet(
+            "QFrame#ScalarsPanel {"
+            "background-color: rgba(255, 255, 255, 0.85);"
+            "border: 1px solid rgba(176, 122, 140, 0.35);"
+            "border-radius: 12px;"
+            "}"
+        )
+        self.scalars_layout = QHBoxLayout(self.scalars_container)
+        self.scalars_layout.setContentsMargins(18, 10, 18, 10)
+        self.scalars_layout.setSpacing(12)
+        info_lbl = QLabel("Escalares por matriz (opcional):")
+        info_lbl.setObjectName("Subtitle")
+        self.scalars_layout.addWidget(info_lbl)
+        self.scalars_controls_layout = QHBoxLayout()
+        self.scalars_controls_layout.setContentsMargins(0, 0, 0, 0)
+        self.scalars_controls_layout.setSpacing(8)
+        self.scalars_layout.addLayout(self.scalars_controls_layout, 1)
+        self.lay.insertWidget(2, self.scalars_container)
+
+        self.scalar_controls = []
+        try:
+            self._ensure_scalar_controls(int(self.num_edit.text()))
+        except Exception:
+            self._ensure_scalar_controls(0)
+
+    def _ensure_scalar_controls(self, count: int):
+        while self.scalars_controls_layout.count():
+            item = self.scalars_controls_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        self.scalar_controls = []
+        if count <= 0:
+            self.scalars_controls_layout.addStretch(1)
+            return
+        for idx in range(count):
+            pair = QFrame()
+            pair_layout = QHBoxLayout(pair)
+            pair_layout.setContentsMargins(0, 0, 0, 0)
+            pair_layout.setSpacing(4)
+            lbl = QLabel(f"M{idx+1}:")
+            lbl.setAlignment(Qt.AlignCenter)
+            pair_layout.addWidget(lbl)
+            chk = QCheckBox(f"k{idx+1}")
+            chk.setToolTip("Activa para multiplicar la matriz por el escalar indicado.")
+            pair_layout.addWidget(chk)
+            edit = QLineEdit("1")
+            edit.setFixedWidth(70)
+            edit.setAlignment(Qt.AlignCenter)
+            edit.setToolTip("Valor del escalar para esta matriz.")
+            pair_layout.addWidget(edit)
+            self.scalars_controls_layout.addWidget(pair)
+            self.scalar_controls.append((chk, edit))
+        self.scalars_controls_layout.addStretch(1)
+
+    def _scale_matrices(self, matrices):
+        scaled = []
+        logs = []
+        scalars = []
+        for idx, mat in enumerate(matrices):
+            apply_scalar = idx < len(self.scalar_controls) and self.scalar_controls[idx][0].isChecked()
+            scalar_value = Fraction(1)
+            if apply_scalar:
+                try:
+                    scalar_value = _parse_fraction(self.scalar_controls[idx][1].text())
+                except Exception as exc:
+                    raise ValueError(f"Escalar inválido en Matriz {idx+1}: {exc}") from exc
+            scalars.append(scalar_value if apply_scalar else Fraction(1))
+            new_matrix = []
+            for row in mat:
+                if apply_scalar:
+                    new_matrix.append([scalar_value * val for val in row])
+                else:
+                    new_matrix.append([val for val in row])
+            scaled.append(new_matrix)
+            if apply_scalar and scalar_value != 1:
+                logs.append(f"Matriz {idx+1}: se multiplicó por k{idx+1} = {scalar_value}")
+        return scaled, logs, scalars
 
     def _setup_entries(self):
         for i in reversed(range(self.grid.count())):
             w = self.grid.itemAt(i).widget()
             if w: w.setParent(None)
         filas = int(self.f_edit.text()); cols = int(self.c_edit.text()); n = int(self.num_edit.text())
+        self._ensure_scalar_controls(n)
         self.entries = []
         for m in range(n):
             g = QGridLayout(); g.setHorizontalSpacing(6); g.setVerticalSpacing(6)
@@ -238,8 +319,16 @@ class SumaMatricesWindow(_BaseMatrixWindow):
 
     def _run(self):
         mats = self._leer_all()
-        filas = len(mats[0]); cols = len(mats[0][0]) if filas else 0
-        result = [[sum(m[i][j] for m in mats) for j in range(cols)] for i in range(filas)]
+        if not mats:
+            QMessageBox.warning(self, "Aviso", "Crea las matrices antes de calcular.")
+            return
+        try:
+            scaled_mats, logs, scalars = self._scale_matrices(mats)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Aviso", str(exc))
+            return
+        filas = len(scaled_mats[0]); cols = len(scaled_mats[0][0]) if filas else 0
+        result = [[sum(m[i][j] for m in scaled_mats) for j in range(cols)] for i in range(filas)]
         def format_matrix_lines(M):
             if not M: return []
             w = max(len(str(x)) for r in M for x in r)
@@ -260,14 +349,38 @@ class SumaMatricesWindow(_BaseMatrixWindow):
             self._show_matrix_result(result, title="Matriz resultante")
         except Exception:
             pass
+        if logs:
+            self.result_box.insertPlainText("Escalares aplicados antes de sumar:\n")
+            for line in logs:
+                self.result_box.insertPlainText(f" - {line}\n")
+            self.result_box.insertPlainText("\n")
         self.result_box.insertPlainText("Matriz resultante\n\n")
         for ln in format_matrix_lines(result):
             self.result_box.insertPlainText(ln + "\n")
         self.result_box.insertPlainText("\nDetalle de la suma por posicion\n")
         for i in range(filas):
             for j in range(cols):
-                parts = " + ".join(str(m[i][j]) for m in mats)
-                self.result_box.insertPlainText(f"[{i+1},{j+1}]: {parts} = {result[i][j]}\n")
+                expr_parts = []
+                scaled_parts = []
+                for idx, mat in enumerate(mats):
+                    applied = idx < len(self.scalar_controls) and self.scalar_controls[idx][0].isChecked()
+                    scalar_val = scalars[idx] if idx < len(scalars) else Fraction(1)
+                    original_val = mat[i][j]
+                    if applied:
+                        if scalar_val != 1:
+                            expr_parts.append(f"({scalar_val}*{original_val})")
+                        else:
+                            expr_parts.append(f"(1*{original_val})")
+                    else:
+                        expr_parts.append(str(original_val))
+                    scaled_parts.append(str(scaled_mats[idx][i][j]))
+                expr_text = " + ".join(expr_parts)
+                scaled_text = " + ".join(scaled_parts)
+                if expr_text == scaled_text:
+                    line = f"[{i+1},{j+1}]: {expr_text} = {result[i][j]}"
+                else:
+                    line = f"[{i+1},{j+1}]: {expr_text} = {scaled_text} = {result[i][j]}"
+                self.result_box.insertPlainText(line + "\n")
 
 
 class RestaMatricesWindow(SumaMatricesWindow):
@@ -283,8 +396,22 @@ class RestaMatricesWindow(SumaMatricesWindow):
 
     def _run(self):
         mats = self._leer_all()
-        filas = len(mats[0]); cols = len(mats[0][0]) if filas else 0
-        result = [[mats[0][i][j] - sum(mats[k][i][j] for k in range(1, len(mats))) for j in range(cols)] for i in range(filas)]
+        if not mats:
+            QMessageBox.warning(self, "Aviso", "Crea las matrices antes de calcular.")
+            return
+        try:
+            scaled_mats, logs, scalars = self._scale_matrices(mats)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Aviso", str(exc))
+            return
+        filas = len(scaled_mats[0]); cols = len(scaled_mats[0][0]) if filas else 0
+        result = [
+            [
+                scaled_mats[0][i][j] - sum(scaled_mats[k][i][j] for k in range(1, len(scaled_mats)))
+                for j in range(cols)
+            ]
+            for i in range(filas)
+        ]
         def _fmt_mat(M):
             if not M: return []
             w = max(len(str(x)) for r in M for x in r)
@@ -300,15 +427,52 @@ class RestaMatricesWindow(SumaMatricesWindow):
             self._show_matrix_result(result, title="Matriz resultante")
         except Exception:
             pass
-        self.result_box.clear()
+        if logs:
+            self.result_box.insertPlainText("Escalares aplicados antes de restar:\n")
+            for line in logs:
+                self.result_box.insertPlainText(f" - {line}\n")
+            self.result_box.insertPlainText("\n")
         self.result_box.insertPlainText("Matriz resultante\n\n")
         for ln in _fmt_mat(result):
             self.result_box.insertPlainText(ln + "\n")
         self.result_box.insertPlainText("\nDetalle de la resta por posicion\n")
         for i in range(filas):
             for j in range(cols):
-                parts = " - ".join(str(mats[k][i][j]) for k in range(len(mats)))
-                self.result_box.insertPlainText(f"[{i+1},{j+1}]: {parts} = {result[i][j]}\n")
+                expr_text = ""
+                scaled_text = ""
+                if mats:
+                    applied0 = len(self.scalar_controls) > 0 and self.scalar_controls[0][0].isChecked()
+                    scalar0 = scalars[0] if scalars else Fraction(1)
+                    base_val = mats[0][i][j]
+                    if applied0:
+                        base_expr = f"({scalar0}*{base_val})" if scalar0 != 1 else f"(1*{base_val})"
+                    else:
+                        base_expr = str(base_val)
+                    base_scaled = str(scaled_mats[0][i][j])
+                    rest_expr = []
+                    rest_scaled = []
+                    for idx in range(1, len(mats)):
+                        applied = idx < len(self.scalar_controls) and self.scalar_controls[idx][0].isChecked()
+                        scalar_val = scalars[idx] if idx < len(scalars) else Fraction(1)
+                        orig_val = mats[idx][i][j]
+                        if applied:
+                            rest_expr.append(f"({scalar_val}*{orig_val})" if scalar_val != 1 else f"(1*{orig_val})")
+                        else:
+                            rest_expr.append(str(orig_val))
+                        rest_scaled.append(str(scaled_mats[idx][i][j]))
+                    if rest_expr:
+                        expr_text = base_expr + " - " + " - ".join(rest_expr)
+                        scaled_text = base_scaled + " - " + " - ".join(rest_scaled)
+                    else:
+                        expr_text = base_expr
+                        scaled_text = base_scaled
+                if not expr_text:
+                    line = f"[{i+1},{j+1}]: {result[i][j]}"
+                elif expr_text == scaled_text:
+                    line = f"[{i+1},{j+1}]: {expr_text} = {result[i][j]}"
+                else:
+                    line = f"[{i+1},{j+1}]: {expr_text} = {scaled_text} = {result[i][j]}"
+                self.result_box.insertPlainText(line + "\n")
 
 
 class MultiplicacionMatricesWindow(_BaseMatrixWindow):
