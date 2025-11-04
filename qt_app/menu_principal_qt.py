@@ -14,6 +14,7 @@ from .menu_matrices_qt import MenuMatricesWindow
 from .menu_sistemas_qt import MenuSistemasWindow
 from .independencia_qt import IndependenciaWindow
 from .transformaciones_qt import TransformacionesWindow
+from .menu_metodos_numericos_qt import MenuMetodosNumericosWindow
 from .theme import install_toggle_shortcut, bind_font_scale_stylesheet
 from .settings_qt import open_settings_dialog
 
@@ -66,6 +67,11 @@ class MenuPrincipalWindow(QMainWindow):
         self.btn_transformaciones.setMinimumHeight(44)
         self.btn_transformaciones.clicked.connect(self._open_transformaciones)
         nav_lay.addWidget(self.btn_transformaciones)
+
+        self.btn_metodos = QPushButton("Metodos numericos")
+        self.btn_metodos.setMinimumHeight(44)
+        self.btn_metodos.clicked.connect(self._open_metodos_numericos)
+        nav_lay.addWidget(self.btn_metodos)
 
         nav_lay.addStretch(1)
 
@@ -187,6 +193,10 @@ class MenuPrincipalWindow(QMainWindow):
 
     def _open_transformaciones(self):
         self.w = TransformacionesWindow(parent=self)
+        self.w.showMaximized()
+
+    def _open_metodos_numericos(self):
+        self.w = MenuMetodosNumericosWindow(parent=self)
         self.w.showMaximized()
 
     def _open_settings(self):

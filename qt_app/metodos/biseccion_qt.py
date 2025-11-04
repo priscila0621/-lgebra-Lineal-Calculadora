@@ -1,0 +1,575 @@
+from math import isfinite
+import math
+from dataclasses import dataclass
+from typing import Callable, List, Tuple
+
+from PySide6.QtWidgets import (
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QFrame,
+    QLineEdit,
+    QScrollArea,
+    QGridLayout,
+    QMessageBox,
+    QTableWidget,
+    QTableWidgetItem,
+    QSpinBox,
+    QSizePolicy,
+    QHeaderView,
+    QDialog,
+    QDialogButtonBox,
+)
+from PySide6.QtCore import Qt
+
+from ..theme import bind_font_scale_stylesheet, install_toggle_shortcut
+from ..settings_qt import open_settings_dialog
+
+
+_ALLOWED_NAMES = {
+    name: getattr(math, name)
+    for name in dir(math)
+    if not name.startswith("_")
+}
+_ALLOWED_NAMES.update(
+    {
+        "abs": abs,
+        "pow": pow,
+        "pi": math.pi,
+        "e": math.e,
+    }
+)
+
+
+def _format_number(value: float) -> str:
+    try:
+        if not isfinite(value):
+            return str(value)
+        value = float(value)
+    except Exception:
+        return str(value)
+
+    if value == 0.0:
+        return "0"
+    if abs(value) >= 1_000_000 or abs(value) < 1e-5:
+        return f"{value:.6e}"
+    text = f"{value:.10f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def _parse_numeric(text: str) -> float:
+    cleaned = (text or "").strip()
+    if not cleaned:
+        raise ValueError("Ingrese un numero valido.")
+    cleaned = cleaned.replace("^", "**")
+    # Evitar que el usuario utilice la variable x en intervalos o tolerancia
+    if "x" in cleaned.lower():
+        raise ValueError("Los parametros numericos no deben contener la variable x.")
+    try:
+        value = eval(cleaned, {"__builtins__": {}}, dict(_ALLOWED_NAMES))
+    except Exception as exc:
+        raise ValueError(f"No se pudo interpretar el numero '{cleaned}': {exc}") from exc
+    try:
+        return float(value)
+    except Exception as exc:
+        raise ValueError(f"El valor '{cleaned}' no es numerico.") from exc
+
+
+def _compile_function(expr: str) -> Callable[[float], float]:
+    cleaned = (expr or "").strip()
+    if not cleaned:
+        raise ValueError("Ingrese una funcion f(x).")
+    cleaned = cleaned.replace("==", "=")
+    if "=" in cleaned:
+        parts = cleaned.split("=")
+        if len(parts) != 2:
+            raise ValueError("Solo se admite una igualdad del tipo expresion = 0.")
+        left, right = (p.strip() for p in parts)
+        if not left or not right:
+            raise ValueError("Completa ambos lados de la igualdad, por ejemplo: cos(x) - x = 0.")
+        cleaned = f"({left}) - ({right})"
+    try:
+        code = compile(cleaned, "<funcion>", "eval")
+    except Exception as exc:
+        raise ValueError(f"No se pudo compilar la funcion: {exc}") from exc
+
+    def _fn(x: float) -> float:
+        local = dict(_ALLOWED_NAMES)
+        local["x"] = x
+        value = eval(code, {"__builtins__": {}}, local)
+        return float(value)
+
+    # Verificacion rapida para detectar errores inmediatos
+    try:
+        _ = _fn(0.0)
+    except Exception:
+        # No levantamos, simplemente dejamos que se maneje al evaluar
+        pass
+
+    return _fn
+
+
+@dataclass
+class BisectionStep:
+    iteration: int
+    a: float
+    b: float
+    c: float
+    fa: float
+    fb: float
+    fc: float
+
+
+def _run_bisection(
+    func: Callable[[float], float],
+    a: float,
+    b: float,
+    tol: float,
+    max_iterations: int = 1000,
+) -> Tuple[List[BisectionStep], float, float, int]:
+    fa = func(a)
+    fb = func(b)
+    if not (fa * fb < 0):
+        raise ValueError("El intervalo inicial debe contener la raiz (f(a) * f(b) < 0).")
+
+    steps: List[BisectionStep] = []
+    iteration = 0
+
+    while iteration < max_iterations:
+        iteration += 1
+        c = (a + b) / 2.0
+        fc = func(c)
+        step = BisectionStep(iteration, a, b, c, fa, fb, fc)
+        steps.append(step)
+
+        if abs(fc) < tol:
+            return steps, c, fc, iteration
+
+        if fa * fc < 0:
+            b = c
+            fb = fc
+        else:
+            a = c
+            fa = fc
+
+    raise ValueError("El metodo excedio el maximo de iteraciones permitidas.")
+
+
+class RootInputCard(QFrame):
+    def __init__(self, index: int):
+        super().__init__()
+        self.setObjectName("InnerCard")
+        self.setStyleSheet(
+            """
+            QFrame#InnerCard {
+                background-color: rgba(255, 255, 255, 0.82);
+                border-radius: 16px;
+            }
+            """
+        )
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        self.title = QLabel()
+        self.title.setObjectName("Subtitle")
+        layout.addWidget(self.title)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(14)
+        grid.setVerticalSpacing(12)
+        layout.addLayout(grid)
+
+        lbl_func = QLabel("f(x):")
+        lbl_func.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        grid.addWidget(lbl_func, 0, 0)
+        self.function_edit = QLineEdit()
+        self.function_edit.setPlaceholderText("Ejemplo: x**3 - x - 2")
+        self.function_edit.setClearButtonEnabled(True)
+        grid.addWidget(self.function_edit, 0, 1, 1, 2)
+
+        lbl_intervalo = QLabel("Intervalo [a, b]:")
+        lbl_intervalo.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        grid.addWidget(lbl_intervalo, 1, 0)
+
+        interval_widget = QWidget()
+        interval_layout = QHBoxLayout(interval_widget)
+        interval_layout.setContentsMargins(0, 0, 0, 0)
+        interval_layout.setSpacing(10)
+
+        lbl_a = QLabel("a =")
+        interval_layout.addWidget(lbl_a)
+
+        self.a_edit = QLineEdit()
+        self.a_edit.setPlaceholderText("Ejemplo: 1")
+        self.a_edit.setAlignment(Qt.AlignCenter)
+        self.a_edit.setClearButtonEnabled(True)
+        self.a_edit.setToolTip("Extremo izquierdo del intervalo")
+        interval_layout.addWidget(self.a_edit)
+
+        lbl_b = QLabel("b =")
+        interval_layout.addWidget(lbl_b)
+
+        self.b_edit = QLineEdit()
+        self.b_edit.setPlaceholderText("Ejemplo: 2")
+        self.b_edit.setAlignment(Qt.AlignCenter)
+        self.b_edit.setClearButtonEnabled(True)
+        self.b_edit.setToolTip("Extremo derecho del intervalo")
+        interval_layout.addWidget(self.b_edit)
+
+        interval_layout.addStretch(1)
+
+        grid.addWidget(interval_widget, 1, 1, 1, 3)
+
+        lbl_tol = QLabel("Tolerancia:")
+        lbl_tol.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        grid.addWidget(lbl_tol, 2, 0)
+        self.tol_edit = QLineEdit()
+        self.tol_edit.setPlaceholderText("Ejemplo: 0.0001")
+        self.tol_edit.setAlignment(Qt.AlignCenter)
+        self.tol_edit.setClearButtonEnabled(True)
+        grid.addWidget(self.tol_edit, 2, 1, 1, 3)
+
+        lbl_aprox = QLabel("Valor aproximado (opcional):")
+        lbl_aprox.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        grid.addWidget(lbl_aprox, 3, 0)
+        self.approx_edit = QLineEdit()
+        self.approx_edit.setPlaceholderText("Ejemplo: 1.2")
+        self.approx_edit.setAlignment(Qt.AlignCenter)
+        self.approx_edit.setClearButtonEnabled(True)
+        self.approx_edit.setToolTip("Ingresa un valor esperado para comparar, deja vacio si no aplica.")
+        grid.addWidget(self.approx_edit, 3, 1, 1, 3)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 1)
+        grid.setColumnStretch(3, 1)
+
+        bind_font_scale_stylesheet(
+            self.title,
+            "color:#6E4B5E;font-weight:600;font-size:{subtitle}px;",
+            subtitle=16,
+        )
+
+        self.set_index(index)
+
+    def set_index(self, index: int) -> None:
+        self.title.setText(f"Raiz #{index}")
+
+    def values(self) -> Tuple[str, str, str, str, str]:
+        return (
+            self.function_edit.text().strip(),
+            self.a_edit.text().strip(),
+            self.b_edit.text().strip(),
+            self.tol_edit.text().strip(),
+            self.approx_edit.text().strip(),
+        )
+
+
+class MetodoBiseccionWindow(QMainWindow):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Metodo de Biseccion")
+        self.root_cards: List[RootInputCard] = []
+
+        central = QWidget()
+        self.setCentralWidget(central)
+        outer = QVBoxLayout(central)
+        outer.setContentsMargins(24, 24, 24, 24)
+        outer.setSpacing(18)
+
+        nav = QFrame()
+        nav.setObjectName("TopNav")
+        nav_layout = QHBoxLayout(nav)
+        nav_layout.setContentsMargins(18, 12, 18, 12)
+        nav_layout.setSpacing(12)
+
+        self.btn_back = QPushButton("\u2190")
+        self.btn_back.setObjectName("BackButton")
+        self.btn_back.setFixedSize(42, 42)
+        self.btn_back.setToolTip("Volver")
+        self.btn_back.setCursor(Qt.PointingHandCursor)
+        self.btn_back.clicked.connect(self._go_back)
+        nav_layout.addWidget(self.btn_back)
+
+        nav_layout.addSpacing(6)
+
+        lbl_roots = QLabel("Cantidad de raices:")
+        nav_layout.addWidget(lbl_roots)
+
+        self.root_count = QSpinBox()
+        self.root_count.setRange(1, 10)
+        self.root_count.setValue(1)
+        self.root_count.valueChanged.connect(self._sync_root_cards)
+        nav_layout.addWidget(self.root_count)
+
+        nav_layout.addSpacing(12)
+
+        self.btn_calcular = QPushButton("Calcular biseccion")
+        self.btn_calcular.setMinimumHeight(36)
+        self.btn_calcular.clicked.connect(self._calcular)
+        nav_layout.addWidget(self.btn_calcular)
+
+        self.btn_limpiar = QPushButton("Limpiar formularios")
+        self.btn_limpiar.setMinimumHeight(36)
+        self.btn_limpiar.clicked.connect(self._limpiar)
+        nav_layout.addWidget(self.btn_limpiar)
+
+        nav_layout.addStretch(1)
+
+        self.btn_settings = QPushButton("Configuracion")
+        self.btn_settings.clicked.connect(self._open_settings)
+        nav_layout.addWidget(self.btn_settings, 0, Qt.AlignVCenter)
+
+        outer.addWidget(nav)
+
+        card = QFrame()
+        card.setObjectName("Card")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(32, 28, 32, 28)
+        card_layout.setSpacing(18)
+
+        title = QLabel("Metodo de Biseccion")
+        title.setObjectName("Title")
+        card_layout.addWidget(title)
+
+        subtitle = QLabel(
+            "Ingresa la funcion, el intervalo [a, b] y la tolerancia para cada raiz. "
+            "El metodo aplicara el criterio de paro |f(c)| < tolerancia exactamente como lo solicita el profesor."
+        )
+        subtitle.setObjectName("Subtitle")
+        subtitle.setWordWrap(True)
+        card_layout.addWidget(subtitle)
+
+        subtitle_2 = QLabel(
+            "Puedes calcular hasta diez raices en una sola ejecucion. Cada conjunto respetara el intervalo y "
+            "validara que f(a) y f(b) tengan signos opuestos antes de iniciar."
+        )
+        subtitle_2.setObjectName("Subtitle")
+        subtitle_2.setWordWrap(True)
+        card_layout.addWidget(subtitle_2)
+
+        forms_scroll = QScrollArea()
+        forms_scroll.setWidgetResizable(True)
+        self.forms_container = QWidget()
+        self.forms_layout = QVBoxLayout(self.forms_container)
+        self.forms_layout.setContentsMargins(0, 0, 0, 0)
+        self.forms_layout.setSpacing(14)
+        forms_scroll.setWidget(self.forms_container)
+        card_layout.addWidget(forms_scroll, 1)
+
+        outer.addWidget(card, 1)
+
+        results_title = QLabel("Resultados")
+        results_title.setObjectName("Title")
+        outer.addWidget(results_title)
+
+        self.results_scroll = QScrollArea()
+        self.results_scroll.setWidgetResizable(True)
+        self.results_widget = QWidget()
+        self.results_layout = QVBoxLayout(self.results_widget)
+        self.results_layout.setContentsMargins(0, 0, 0, 0)
+        self.results_layout.setSpacing(16)
+        self.results_scroll.setWidget(self.results_widget)
+        outer.addWidget(self.results_scroll, 2)
+
+        self._sync_root_cards()
+        self._show_empty_results()
+
+        install_toggle_shortcut(self)
+
+    def _go_back(self):
+        try:
+            parent = self.parent()
+            self.close()
+            if parent is not None:
+                parent.show()
+                parent.activateWindow()
+        except Exception:
+            self.close()
+
+    def _open_settings(self):
+        open_settings_dialog(self)
+
+    def _limpiar(self):
+        for card in self.root_cards:
+            card.function_edit.clear()
+            card.a_edit.clear()
+            card.b_edit.clear()
+            card.tol_edit.clear()
+            card.approx_edit.clear()
+        self._show_empty_results()
+
+    def _sync_root_cards(self):
+        target = self.root_count.value()
+        while len(self.root_cards) < target:
+            card = RootInputCard(len(self.root_cards) + 1)
+            self.root_cards.append(card)
+            self.forms_layout.addWidget(card)
+        while len(self.root_cards) > target:
+            card = self.root_cards.pop()
+            card.setParent(None)
+        for idx, card in enumerate(self.root_cards, start=1):
+            card.set_index(idx)
+
+    def _calcular(self):
+        resultados = []
+        for idx, card in enumerate(self.root_cards, start=1):
+            expr, a_txt, b_txt, tol_txt, approx_txt = card.values()
+            try:
+                func = _compile_function(expr)
+                a = _parse_numeric(a_txt)
+                b = _parse_numeric(b_txt)
+                tol = _parse_numeric(tol_txt)
+                if tol <= 0:
+                    raise ValueError("La tolerancia debe ser positiva.")
+                approx_value = None
+                if approx_txt:
+                    approx_value = _parse_numeric(approx_txt)
+                pasos, raiz, fc, iteraciones = _run_bisection(func, a, b, tol)
+            except Exception as exc:
+                QMessageBox.warning(
+                    self,
+                    "Aviso",
+                    f"No se pudo calcular la raiz #{idx}: {exc}",
+                )
+                return
+            resultados.append((idx, expr, pasos, raiz, fc, iteraciones, approx_value))
+
+        self._render_resultados(resultados)
+
+    def _create_table_widget(self, pasos: List[BisectionStep]) -> QTableWidget:
+        table = QTableWidget()
+        table.setColumnCount(7)
+        table.setHorizontalHeaderLabels(
+            ["Iteracion", "a", "b", "c", "f(a)", "f(b)", "f(c)"]
+        )
+        table.setRowCount(len(pasos))
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        table.setSelectionMode(QTableWidget.NoSelection)
+        table.verticalHeader().setVisible(False)
+        table.setAlternatingRowColors(True)
+        table.setObjectName("ResultsTable")
+        table.setMinimumHeight(320)
+        table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        for row, paso in enumerate(pasos):
+            values = [
+                str(paso.iteration),
+                _format_number(paso.a),
+                _format_number(paso.b),
+                _format_number(paso.c),
+                _format_number(paso.fa),
+                _format_number(paso.fb),
+                _format_number(paso.fc),
+            ]
+            for col, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setTextAlignment(Qt.AlignCenter)
+                table.setItem(row, col, item)
+
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Stretch)
+        return table
+
+    def _open_table_dialog(self, title: str, pasos: List[BisectionStep]) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.resize(960, 600)
+        dialog_layout = QVBoxLayout(dialog)
+        dialog_table = self._create_table_widget(pasos)
+        dialog_table.setMinimumHeight(0)
+        dialog_layout.addWidget(dialog_table, 1)
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(dialog.reject)
+        buttons.accepted.connect(dialog.accept)
+        dialog_layout.addWidget(buttons)
+        dialog.exec()
+
+    def _render_resultados(self, resultados):
+        for i in reversed(range(self.results_layout.count())):
+            item = self.results_layout.itemAt(i)
+            widget = item.widget()
+            if widget:
+                widget.setParent(None)
+
+        for idx, expr, pasos, raiz, fc, iteraciones, approx_value in resultados:
+            card = QFrame()
+            card.setObjectName("Card")
+            layout = QVBoxLayout(card)
+            layout.setContentsMargins(28, 24, 28, 24)
+            layout.setSpacing(18)
+
+            title = QLabel(f"Raiz #{idx} - f(x) = {expr}")
+            title.setObjectName("Subtitle")
+            layout.addWidget(title)
+
+            raiz_txt = _format_number(raiz)
+            error_txt = _format_number(abs(fc))
+            summary_lines = [
+                f"El metodo converge con {iteraciones} iteraciones.",
+                f"La raiz es: {raiz_txt}.",
+                f"El margen de error es: {error_txt}.",
+            ]
+            if approx_value is not None:
+                approx_txt = _format_number(approx_value)
+                diff_txt = _format_number(abs(raiz - approx_value))
+                summary_lines.append(
+                    f"Comparacion con tu valor aproximado {approx_txt}: diferencia = {diff_txt}."
+                )
+            summary = QLabel("\n".join(summary_lines))
+            summary.setWordWrap(True)
+            summary.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+            bind_font_scale_stylesheet(
+                summary,
+                """
+                QLabel {{
+                    background-color: rgba(176, 122, 140, 0.18);
+                    border-radius: 14px;
+                    padding: 18px;
+                    color: #6E4B5E;
+                    font-size: {body}px;
+                    font-weight: 600;
+                    line-height: 150%;
+                }}
+                """,
+                body=18,
+            )
+            layout.addWidget(summary)
+
+            table = self._create_table_widget(pasos)
+            layout.addWidget(table)
+
+            btn_expand = QPushButton("Ver tabla en ventana amplia")
+            btn_expand.setMinimumHeight(32)
+            btn_expand.setCursor(Qt.PointingHandCursor)
+            btn_expand.clicked.connect(
+                lambda _checked=False, t=title.text(), ps=pasos: self._open_table_dialog(t, ps)
+            )
+            layout.addWidget(btn_expand, 0, Qt.AlignRight)
+
+            self.results_layout.addWidget(card)
+
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
+        self.results_layout.addWidget(spacer)
+
+        self.results_scroll.verticalScrollBar().setValue(0)
+
+    def _show_empty_results(self):
+        for i in reversed(range(self.results_layout.count())):
+            item = self.results_layout.itemAt(i)
+            widget = item.widget()
+            if widget:
+                widget.setParent(None)
+        placeholder = QLabel(
+            "Los resultados apareceran aqui una vez que ejecutes el metodo."
+        )
+        placeholder.setAlignment(Qt.AlignCenter)
+        bind_font_scale_stylesheet(
+            placeholder,
+            "color:#8F7A87;font-size:{body}px;font-style:italic;",
+            body=16,
+        )
+        self.results_layout.addWidget(placeholder)

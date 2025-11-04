@@ -4,6 +4,7 @@ from gauss_jordan_app import GaussJordanApp
 from menu_matrices import MenuMatrices
 from independencia_lineal import IndependenciaLinealApp
 from transformaciones_lineales_app import TransformacionesLinealesApp
+from menu_metodos_numericos import MenuMetodosNumericos
 
 class MenuPrincipal:
     def __init__(self, root):
@@ -52,6 +53,9 @@ class MenuPrincipal:
         ttk.Button(root, text="Transformaciones lineales (T(x)=Ax)",
                    style="Primary.TButton", command=self.abrir_transformaciones).pack(pady=10)
 
+        ttk.Button(root, text="Métodos Numéricos",
+                   style="Primary.TButton", command=self.abrir_metodos_numericos).pack(pady=10)
+
     # ======================
     # Métodos
     # ======================
@@ -77,6 +81,12 @@ class MenuPrincipal:
         self.root.destroy()
         root2 = tk.Tk()
         TransformacionesLinealesApp(root2, lambda: self.volver_inicio(root2))
+        root2.mainloop()
+
+    def abrir_metodos_numericos(self):
+        self.root.destroy()
+        root2 = tk.Tk()
+        MenuMetodosNumericos(root2, lambda: self.volver_inicio(root2))
         root2.mainloop()
 
     def volver_inicio(self, ventana_actual):
