@@ -1,12 +1,14 @@
 from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
+    QHBoxLayout,
     QLabel,
     QComboBox,
     QDialogButtonBox,
     QFormLayout,
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon, QPixmap, QPainter, QFont, QColor
 
 from .theme import (
     current_font_scale,
@@ -42,12 +44,49 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Configuracion de interfaz")
         self.setModal(True)
+        # Icono de ventana: engranaje sin fondo
+        try:
+            pm = QPixmap(64, 64)
+            pm.fill(Qt.transparent)
+            p = QPainter(pm)
+            p.setRenderHint(QPainter.Antialiasing)
+            color = self.palette().windowText().color() if self.palette() else QColor("#444")
+            p.setPen(Qt.NoPen)
+            p.setBrush(Qt.NoBrush)
+            p.setPen(color)
+            f = QFont()
+            f.setPointSize(40)
+            f.setBold(True)
+            p.setFont(f)
+            p.drawText(pm.rect(), Qt.AlignCenter, "⚙")
+            p.end()
+            self.setWindowIcon(QIcon(pm))
+        except Exception:
+            pass
 
         layout = QVBoxLayout(self)
-        header = QLabel("Personaliza la apariencia de la calculadora")
-        header.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        header.setStyleSheet("font-weight:700; font-size:16px;")
-        layout.addWidget(header)
+
+        # Encabezado con icono de engranaje (sin fondo)
+        header_row = QHBoxLayout()
+        header_row.setSpacing(12)
+
+        gear = QLabel("⚙")
+        gear.setAlignment(Qt.AlignCenter)
+        gear.setStyleSheet("font-size: 24px; background: transparent;")
+        header_row.addWidget(gear, 0, Qt.AlignVCenter)
+
+        title_box = QVBoxLayout()
+        title = QLabel("Configuracion de interfaz")
+        title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        title.setStyleSheet("font-weight:700; font-size:18px;")
+        subtitle = QLabel("Personaliza la apariencia de la calculadora")
+        subtitle.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        subtitle.setStyleSheet("color: #6b7280;")
+        title_box.addWidget(title)
+        title_box.addWidget(subtitle)
+        header_row.addLayout(title_box, 1)
+
+        layout.addLayout(header_row)
 
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignLeft)
@@ -94,15 +133,19 @@ class SettingsDialog(QDialog):
         info.setStyleSheet("color: #6b7280;")
         layout.addWidget(info)
 
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.Ok | QDialogButtonBox.Cancel | QDialogButtonBox.Apply
-        )
-        buttons.accepted.connect(self.accept)
+        # Botonera minimalista: solo "Cerrar". Los cambios se aplican al instante.
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)
-        apply_btn = buttons.button(QDialogButtonBox.Apply)
-        if apply_btn:
-            apply_btn.clicked.connect(self.apply_changes)
         layout.addWidget(buttons)
+
+        # Aplicar cambios automaticamente cuando el usuario modifica opciones
+        self.theme_combo.currentIndexChanged.connect(self.apply_changes)
+        self.font_scale_combo.currentIndexChanged.connect(self.apply_changes)
+        try:
+            self.font_family_combo.currentTextChanged.connect(self.apply_changes)
+        except Exception:
+            # Compatibilidad segun versiones de Qt
+            self.font_family_combo.editTextChanged.connect(self.apply_changes)
 
     def _app(self):
         from PySide6.QtWidgets import QApplication

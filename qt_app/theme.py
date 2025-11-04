@@ -144,6 +144,7 @@ def apply_theme(app: QApplication, mode: str = "light") -> None:
     subtitle_font = _scaled_px(14, scale)
     button_font = _scaled_px(14, scale)
     back_button_font = _scaled_px(20, scale)
+    settings_icon_font = _scaled_px(28, scale)
 
     family = current_font_family(app)
     palette = QPalette()
@@ -249,6 +250,17 @@ def apply_theme(app: QApplication, mode: str = "light") -> None:
             }}
             QTabBar::tab:selected {{ background: #B07A8C; color: #ffffff; }}
             QTabBar::tab:hover {{ background: #9A5D73; }}
+            QToolButton#SettingsButton {{
+                background: transparent;
+                border: none;
+                color: #F7F4F1;
+                font-size: {settings_icon_font}px;
+                min-width: 40px;
+                min-height: 40px;
+                padding: 6px;
+                border-radius: 20px;
+            }}
+            QToolButton#SettingsButton:hover {{ color: #B07A8C; }}
             """
         )
     else:
@@ -352,6 +364,17 @@ def apply_theme(app: QApplication, mode: str = "light") -> None:
                 border-radius: 12px;
             }}
             QFrame#TopNav QPushButton {{ min-width: 120px; }}
+            QToolButton#SettingsButton {{
+                background: transparent;
+                border: none;
+                color: #6E4B5E;
+                font-size: {settings_icon_font}px;
+                min-width: 40px;
+                min-height: 40px;
+                padding: 6px;
+                border-radius: 20px;
+            }}
+            QToolButton#SettingsButton:hover {{ color: #9A5D73; }}
             """
         )
     try:

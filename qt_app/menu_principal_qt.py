@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QFrame,
     QSizePolicy,
+    QToolButton,
 )
 from PySide6.QtCore import Qt
 from .menu_matrices_qt import MenuMatricesWindow
@@ -68,6 +69,17 @@ class MenuPrincipalWindow(QMainWindow):
 
         nav_lay.addStretch(1)
 
+        # Botón de configuración (icono grande) sobre los créditos
+        settings_btn = QToolButton()
+        settings_btn.setObjectName("SettingsButton")
+        settings_btn.setText("⚙")
+        settings_btn.setToolTip("Configuración")
+        settings_btn.setCursor(Qt.PointingHandCursor)
+        settings_btn.setAutoRaise(True)
+        settings_btn.setFixedSize(60, 60)
+        settings_btn.clicked.connect(self._open_settings)
+        nav_lay.addWidget(settings_btn, 0, Qt.AlignLeft)
+
         about = QLabel(
             "© 2025 · Priscila Selva · Emma Serrano · Jeyni Orozco\n"
             "Todos los derechos reservados."
@@ -88,10 +100,6 @@ class MenuPrincipalWindow(QMainWindow):
 
         top_bar = QHBoxLayout()
         top_bar.addStretch(1)
-        settings_btn = QPushButton("Configuracion")
-        settings_btn.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        settings_btn.clicked.connect(self._open_settings)
-        top_bar.addWidget(settings_btn, 0, Qt.AlignVCenter)
         content_lay.addLayout(top_bar)
 
         hero = QHBoxLayout()
@@ -132,9 +140,9 @@ class MenuPrincipalWindow(QMainWindow):
         title_box.addSpacing(8)
 
         highlights = QLabel(
-            "· Automatiza cálculos complejos con precisión fraccional.\n"
-            "· Documenta cada procedimiento con trazabilidad paso a paso.\n"
-            "· Diseñada para la Universidad de Tecnología: innovación aplicada."
+            "• Automatiza cálculos complejos con precisión fraccional.\n"
+            "• Documenta cada procedimiento con trazabilidad paso a paso.\n"
+            "• Diseñada para la Universidad de Tecnología: innovación aplicada."
         )
         highlights.setWordWrap(True)
         highlights.setAlignment(Qt.AlignLeft)
@@ -183,3 +191,4 @@ class MenuPrincipalWindow(QMainWindow):
 
     def _open_settings(self):
         open_settings_dialog(self)
+
