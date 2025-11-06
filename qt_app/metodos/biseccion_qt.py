@@ -483,6 +483,43 @@ class RootInputCard(QFrame):
         self.function_edit.setClearButtonEnabled(True)
         grid.addWidget(self.function_edit, 0, 1, 1, 2)
 
+        # Barra de atajos para funciones (para facilitar ingreso de f(x))
+        self.func_toolbar = QWidget()
+        ft_layout = QHBoxLayout(self.func_toolbar)
+        ft_layout.setContentsMargins(0, 0, 0, 0)
+        ft_layout.setSpacing(6)
+
+        def add_btn(text: str, insert: str, cursor_offset: int = 0, tooltip=None):
+            btn = QToolButton()
+            btn.setText(text)
+            btn.setAutoRaise(True)
+            if tooltip:
+                btn.setToolTip(tooltip)
+
+            def _on_click(_checked=False, _insert=insert, _offset=cursor_offset):
+                self._insert_into_line_edit(self.function_edit, _insert, _offset)
+
+            btn.clicked.connect(_on_click)
+            ft_layout.addWidget(btn)
+
+        # Botones comúnes y funciones necesarias
+        add_btn("x", "x", tooltip="Insertar variable x")
+        add_btn("x²", "x**2", tooltip="Insertar x al cuadrado")
+        add_btn("^", "**", tooltip="Potencia: usa ** como exponente")
+        add_btn("()", "()", cursor_offset=-1, tooltip="Paréntesis")
+        add_btn("√", "sqrt()", cursor_offset=-1, tooltip="Raíz: sqrt()")
+        add_btn("sen", "sen()", cursor_offset=-1, tooltip="Seno")
+        add_btn("cos", "cos()", cursor_offset=-1, tooltip="Coseno")
+        add_btn("tan", "tan()", cursor_offset=-1, tooltip="Tangente")
+        add_btn("ln", "ln()", cursor_offset=-1, tooltip="Logaritmo natural")
+        add_btn("log", "log()", cursor_offset=-1, tooltip="Logaritmo base e (math.log)")
+        add_btn("exp", "exp()", cursor_offset=-1, tooltip="Exponencial e^x")
+        add_btn("abs", "abs()", cursor_offset=-1, tooltip="Valor absoluto")
+        add_btn("π", "pi", tooltip="Constante pi")
+        add_btn("e", "e", tooltip="Constante e")
+
+        grid.addWidget(self.func_toolbar, 0, 3)
+
         self.lbl_intervalo = QLabel("Intervalo [a, b]:")
         self.lbl_intervalo.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         grid.addWidget(self.lbl_intervalo, 1, 0)
@@ -553,12 +590,30 @@ class RootInputCard(QFrame):
         for w in (
             self.lbl_func,
             self.function_edit,
+            self.func_toolbar,
             self.lbl_tol,
             self.tol_edit,
             self.lbl_aprox,
             self.approx_edit,
         ):
             w.setVisible(is_primary)
+
+    def _insert_into_line_edit(self, edit: QLineEdit, text: str, cursor_offset: int = 0) -> None:
+        try:
+            pos = edit.cursorPosition()
+            current = edit.text() or ""
+            new_text = current[:pos] + text + current[pos:]
+            edit.setText(new_text)
+            new_pos = max(0, min(len(new_text), pos + len(text) + cursor_offset))
+            edit.setCursorPosition(new_pos)
+            edit.setFocus()
+        except Exception:
+            # En caso de cualquier error, degradar a un append simple
+            edit.setText((edit.text() or "") + text)
+            try:
+                edit.setCursorPosition(len(edit.text()))
+            except Exception:
+                pass
 
     def set_index(self, index: int) -> None:
         self.title.setText(f"Raíz #{index}")
