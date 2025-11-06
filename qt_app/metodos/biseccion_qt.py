@@ -36,6 +36,8 @@ from ..theme import (
 )
 from ..settings_qt import open_settings_dialog
 
+# Import plotting libraries when needed. We'll import lazily inside the plotting method
+
 
 _ALLOWED_NAMES = {
     name: getattr(math, name)
@@ -460,6 +462,26 @@ class MetodoBiseccionWindow(QMainWindow):
             resultados.append((idx, expr, pasos, raiz, fc, iteraciones, approx_value))
 
         self._render_resultados(resultados)
+        # Preguntar si el usuario desea ver la gráfica
+        try:
+            answer = QMessageBox.question(
+                self,
+                "Mostrar gráfica",
+                "¿Desea ver la gráfica de la función y las raíces encontradas? (S/N):",
+                QMessageBox.Yes | QMessageBox.No,
+            )
+        except Exception:
+            answer = QMessageBox.No
+
+        if answer == QMessageBox.Yes:
+            try:
+                self._plot_resultados(resultados)
+            except Exception as exc:
+                QMessageBox.warning(
+                    self,
+                    "Error al graficar",
+                    f"Ocurrió un error al intentar graficar: {exc}",
+                )
 
     def _create_table_widget(self, pasos: List[BisectionStep]) -> QTableWidget:
         table = QTableWidget()
@@ -595,3 +617,123 @@ class MetodoBiseccionWindow(QMainWindow):
             body=16,
         )
         self.results_layout.addWidget(placeholder)
+
+    def _plot_resultados(self, resultados):
+        """
+        Grafica las funciones y marca las raíces encontradas.
+
+        `resultados` es una lista de tuplas:
+            (idx, expr, pasos, raiz, fc, iteraciones, approx_value)
+
+        Se re-compila cada función y se grafica en el rango de sus intervalos.
+        Si hay varias raíces, la gráfica usa un rango que cubre todos los intervalos.
+        """
+        try:
+            import matplotlib.pyplot as plt
+        except Exception as exc:
+            raise RuntimeError(
+                "matplotlib no está disponible. Instala matplotlib para ver las gráficas."
+            ) from exc
+
+        try:
+            import numpy as np
+        except Exception:
+            np = None
+
+        # Recolectar rangos iniciales de cada resultado
+        ranges = []
+        for (_idx, _expr, pasos, _raiz, _fc, _it, _ap) in resultados:
+            if not pasos:
+                continue
+            # pasos[0].a y pasos[0].b corresponden al intervalo inicial
+            a0 = pasos[0].a
+            b0 = pasos[0].b
+            if a0 > b0:
+                a0, b0 = b0, a0
+            ranges.append((a0, b0))
+
+        if not ranges:
+            raise RuntimeError("No hay intervalos válidos para graficar.")
+
+        global_min = min(r[0] for r in ranges)
+        global_max = max(r[1] for r in ranges)
+
+        # Si solo hay una raíz, centramos en ese intervalo
+        if len(ranges) == 1:
+            x_min, x_max = ranges[0]
+        else:
+            x_min, x_max = global_min, global_max
+
+        # Añadir un pequeño padding
+        span = x_max - x_min
+        if span == 0:
+            pad = abs(x_min) * 0.1 if x_min != 0 else 1.0
+        else:
+            pad = span * 0.12
+        x_min -= pad
+        x_max += pad
+
+        # Preparar xs
+        num_points = 800
+        if np is not None:
+            xs = np.linspace(x_min, x_max, num_points)
+        else:
+            xs = [x_min + (x_max - x_min) * i / (num_points - 1) for i in range(num_points)]
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        # Color/marker cycle
+        colors = plt.rcParams.get("axes.prop_cycle").by_key().get("color", [])
+        markers = ["o", "s", "^", "D", "v", "P", "X", "*", "+", "x"]
+
+        for i, (idx, expr, pasos, raiz, fc, iteraciones, approx_value) in enumerate(resultados):
+            try:
+                func = _compile_function(expr)
+            except Exception:
+                # Saltar función que no compile
+                continue
+
+            # Evaluar y limpiar valores no válidos
+            ys = []
+            for x in xs:
+                try:
+                    y = func(float(x))
+                except Exception:
+                    y = float('nan')
+                ys.append(y)
+
+            color = colors[i % len(colors)] if colors else None
+            # Graficar la curva de la función para este índice (con transparencia si hay muchas)
+            ax.plot(xs, ys, label=f"f(x) #{idx}", color=color, linewidth=1.6, alpha=0.9)
+
+            # Marcar intervalo original
+            if pasos:
+                a0 = pasos[0].a
+                b0 = pasos[0].b
+                ax.axvspan(min(a0, b0), max(a0, b0), alpha=0.08, color=color)
+
+            # Marcar la raíz encontrada
+            try:
+                r_x = float(raiz)
+                r_y = 0.0
+                marker = markers[i % len(markers)]
+                ax.plot(r_x, r_y, marker=marker, color=color, markersize=10, label=f"Raíz {i+1}")
+            except Exception:
+                pass
+
+        # Eje X (y=0)
+        ax.axhline(0.0, color="black", linewidth=0.9)
+
+        ax.set_title("Gráfica de la función y raíces encontradas")
+        ax.set_xlabel("Eje X")
+        ax.set_ylabel("Eje Y")
+
+        # Ajuste de límites y rejilla
+        ax.set_xlim(x_min, x_max)
+        ax.grid(True, linestyle='--', alpha=0.4)
+
+        # Leyenda: queremos que las raíces aparezcan claras
+        ax.legend()
+
+        plt.tight_layout()
+        plt.show()
