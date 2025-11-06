@@ -50,6 +50,13 @@ class MenuMatrices:
         try:
             self.root.withdraw()
             top = tk.Toplevel(self.root)
+            # Si el usuario cierra la ventana con la X, restaurar esta ventana
+            def _on_close():
+                try:
+                    self.root.deiconify()
+                finally:
+                    top.destroy()
+            top.protocol("WM_DELETE_WINDOW", _on_close)
             app_cls(top, volver_callback=self.volver_callback)
         except Exception as exc:
             try:

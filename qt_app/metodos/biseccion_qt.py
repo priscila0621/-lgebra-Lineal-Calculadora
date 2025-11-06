@@ -383,7 +383,33 @@ class MetodoBiseccionWindow(QMainWindow):
         forms_scroll.setWidget(self.forms_container)
         card_layout.addWidget(forms_scroll, 1)
 
-        outer.addWidget(card, 1)
+        # Tarjeta para la gráfica interactiva (derecha)
+        self.plot_card = QFrame()
+        self.plot_card.setObjectName("Card")
+        _plot_outer = QVBoxLayout(self.plot_card)
+        _plot_outer.setContentsMargins(24, 20, 24, 20)
+        _plot_outer.setSpacing(10)
+        _plot_title = QLabel("Gráfica interactiva")
+        _plot_title.setObjectName("Title")
+        _plot_outer.addWidget(_plot_title)
+        self.plot_container = QWidget()
+        self.plot_container_layout = QVBoxLayout(self.plot_container)
+        self.plot_container_layout.setContentsMargins(0, 0, 0, 0)
+        self.plot_container_layout.setSpacing(6)
+        _plot_outer.addWidget(self.plot_container, 1)
+        try:
+            self._init_plot_area()
+        except Exception:
+            pass
+
+        # Disposición superior en dos columnas (izquierda: formularios, derecha: gráfica)
+        top_row = QWidget()
+        top_layout = QHBoxLayout(top_row)
+        top_layout.setContentsMargins(0, 0, 0, 0)
+        top_layout.setSpacing(16)
+        top_layout.addWidget(card, 2)
+        top_layout.addWidget(self.plot_card, 3)
+        outer.addWidget(top_row, 2)
 
         results_title = QLabel("Resultados")
         results_title.setObjectName("Title")
@@ -400,6 +426,10 @@ class MetodoBiseccionWindow(QMainWindow):
 
         self._sync_root_cards()
         self._show_empty_results()
+        try:
+            self._update_plot_live()
+        except Exception:
+            pass
 
         install_toggle_shortcut(self)
 
@@ -436,6 +466,30 @@ class MetodoBiseccionWindow(QMainWindow):
             card.setParent(None)
         for idx, card in enumerate(self.root_cards, start=1):
             card.set_index(idx)
+        # Conectar señales para actualizar la gráfica interactiva
+        for card in self.root_cards:
+            try:
+                card.function_edit.textChanged.disconnect()
+            except Exception:
+                pass
+            try:
+                card.a_edit.textChanged.disconnect()
+            except Exception:
+                pass
+            try:
+                card.b_edit.textChanged.disconnect()
+            except Exception:
+                pass
+            try:
+                card.function_edit.textChanged.connect(self._update_plot_live)
+                card.a_edit.textChanged.connect(self._update_plot_live)
+                card.b_edit.textChanged.connect(self._update_plot_live)
+            except Exception:
+                pass
+        try:
+            self._update_plot_live()
+        except Exception:
+            pass
 
     def _calcular(self):
         resultados = []
@@ -462,6 +516,7 @@ class MetodoBiseccionWindow(QMainWindow):
             resultados.append((idx, expr, pasos, raiz, fc, iteraciones, approx_value))
 
         self._render_resultados(resultados)
+        self._draw_results_on_canvas(resultados)
         # Preguntar si el usuario desea ver la gráfica
         try:
             answer = QMessageBox.question(
@@ -737,3 +792,167 @@ class MetodoBiseccionWindow(QMainWindow):
 
         plt.tight_layout()
         plt.show()
+
+    # --- Integración de gráfica interactiva embebida ---
+    def _init_plot_area(self):
+        try:
+            from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+            from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
+            import matplotlib.pyplot as plt
+        except Exception:
+            placeholder = QLabel("Instala matplotlib para ver la gráfica interactiva.")
+            placeholder.setAlignment(Qt.AlignCenter)
+            self.plot_container_layout.addWidget(placeholder)
+            self._mpl_ready = False
+            return
+
+        self._mpl_ready = True
+        self._mpl = {}
+        self._mpl['plt'] = plt
+        self._mpl['fig'], self._mpl['ax'] = plt.subplots(figsize=(8, 4))
+        self._mpl['canvas'] = FigureCanvas(self._mpl['fig'])
+        self._mpl['toolbar'] = NavigationToolbar(self._mpl['canvas'], self)
+        self._mpl['ax'].grid(True, linestyle='--', alpha=0.3)
+        self._mpl['ax'].set_title("f(x)")
+        self._mpl['ax'].set_xlabel("Eje X")
+        self._mpl['ax'].set_ylabel("Eje Y")
+        self.plot_container_layout.addWidget(self._mpl['toolbar'])
+        self.plot_container_layout.addWidget(self._mpl['canvas'], 1)
+
+    def _current_x_range(self):
+        xs = []
+        for card in self.root_cards:
+            try:
+                a = _parse_numeric(card.a_edit.text().strip())
+                b = _parse_numeric(card.b_edit.text().strip())
+                xs.append(min(a, b))
+                xs.append(max(a, b))
+            except Exception:
+                continue
+        if xs:
+            x_min, x_max = min(xs), max(xs)
+            if x_min == x_max:
+                pad = abs(x_min) * 0.5 if x_min != 0 else 5.0
+                return x_min - pad, x_max + pad
+            pad = (x_max - x_min) * 0.15
+            return x_min - pad, x_max + pad
+        return -10.0, 10.0
+
+    def _update_plot_live(self):
+        if not getattr(self, '_mpl_ready', False):
+            return
+        plt = self._mpl['plt']
+        ax = self._mpl['ax']
+        ax.clear()
+        ax.grid(True, linestyle='--', alpha=0.3)
+        ax.set_xlabel("Eje X")
+        ax.set_ylabel("Eje Y")
+        ax.axhline(0.0, color='black', linewidth=0.9)
+        x_min, x_max = self._current_x_range()
+        try:
+            import numpy as np
+        except Exception:
+            np = None
+        num_points = 600
+        if np is not None:
+            xs = np.linspace(x_min, x_max, num_points)
+        else:
+            xs = [x_min + (x_max - x_min) * i / (num_points - 1) for i in range(num_points)]
+
+        plotted = False
+        for idx, card in enumerate(self.root_cards, start=1):
+            expr = (card.function_edit.text() or "").strip()
+            if not expr:
+                continue
+            try:
+                func = _compile_function(expr)
+            except Exception:
+                continue
+            ys = []
+            for x in xs:
+                try:
+                    y = func(float(x))
+                except Exception:
+                    y = float('nan')
+                ys.append(y)
+            ax.plot(xs, ys, label=f"f(x) #{idx}", linewidth=1.6, alpha=0.9)
+            try:
+                a = _parse_numeric(card.a_edit.text().strip())
+                b = _parse_numeric(card.b_edit.text().strip())
+                ax.axvspan(min(a, b), max(a, b), alpha=0.08)
+            except Exception:
+                pass
+            plotted = True
+
+        if plotted:
+            ax.set_xlim(x_min, x_max)
+            ax.legend()
+            ax.set_title("Vista previa: ajusta la función e intervalos")
+        else:
+            ax.set_title("Escribe f(x) para previsualizar la curva")
+        self._mpl['canvas'].draw_idle()
+
+    def _draw_results_on_canvas(self, resultados):
+        if not getattr(self, '_mpl_ready', False):
+            return
+        plt = self._mpl['plt']
+        ax = self._mpl['ax']
+        ax.clear()
+        ax.grid(True, linestyle='--', alpha=0.3)
+        ax.set_xlabel("Eje X")
+        ax.set_ylabel("Eje Y")
+        ax.axhline(0.0, color='black', linewidth=0.9)
+        ranges = []
+        for (_idx, _expr, pasos, _raiz, _fc, _it, _ap) in resultados:
+            if pasos:
+                a0 = pasos[0].a
+                b0 = pasos[0].b
+                ranges.append((min(a0, b0), max(a0, b0)))
+        if ranges:
+            x_min = min(r[0] for r in ranges)
+            x_max = max(r[1] for r in ranges)
+            span = x_max - x_min
+            pad = span * 0.15 if span else 1.0
+            x_min -= pad
+            x_max += pad
+        else:
+            x_min, x_max = self._current_x_range()
+        try:
+            import numpy as np
+        except Exception:
+            np = None
+        num_points = 800
+        if np is not None:
+            xs = np.linspace(x_min, x_max, num_points)
+        else:
+            xs = [x_min + (x_max - x_min) * i / (num_points - 1) for i in range(num_points)]
+        colors = plt.rcParams.get("axes.prop_cycle").by_key().get("color", [])
+        markers = ["o", "s", "^", "D", "v", "P", "X", "*", "+", "x"]
+        for i, (idx, expr, pasos, raiz, fc, iteraciones, approx_value) in enumerate(resultados):
+            try:
+                func = _compile_function(expr)
+            except Exception:
+                continue
+            ys = []
+            for x in xs:
+                try:
+                    y = func(float(x))
+                except Exception:
+                    y = float('nan')
+                ys.append(y)
+            color = colors[i % len(colors)] if colors else None
+            ax.plot(xs, ys, label=f"f(x) #{idx}", color=color, linewidth=1.6, alpha=0.9)
+            if pasos:
+                a0 = pasos[0].a
+                b0 = pasos[0].b
+                ax.axvspan(min(a0, b0), max(a0, b0), alpha=0.08, color=color)
+            try:
+                rx = float(raiz)
+                marker = markers[i % len(markers)]
+                ax.plot(rx, 0.0, marker=marker, color=color, markersize=10, label=f"Raíz {i+1}")
+            except Exception:
+                pass
+        ax.set_xlim(x_min, x_max)
+        ax.legend()
+        ax.set_title("Resultados de bisección")
+        self._mpl['canvas'].draw_idle()

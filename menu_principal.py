@@ -59,38 +59,45 @@ class MenuPrincipal:
     # ======================
     # Métodos
     # ======================
+    def _abrir_toplevel(self, app_cls, descripcion: str):
+        try:
+            self.root.withdraw()
+            top = tk.Toplevel(self.root)
+
+            def _on_close():
+                try:
+                    self.root.deiconify()
+                finally:
+                    top.destroy()
+
+            top.protocol("WM_DELETE_WINDOW", _on_close)
+            app_cls(top, volver_callback=lambda: (_on_close()))
+        except Exception:
+            try:
+                self.root.deiconify()
+            except Exception:
+                pass
+
     def abrir_sistema(self):
-        self.root.destroy()
-        root2 = tk.Tk()
-        GaussJordanApp(root2, lambda: self.volver_inicio(root2))
-        root2.mainloop()
+        self._abrir_toplevel(GaussJordanApp, "Sistema de ecuaciones")
 
     def abrir_matrices(self):
-        self.root.destroy()
-        root2 = tk.Tk()
-        MenuMatrices(root2, lambda: self.volver_inicio(root2))
-        root2.mainloop()
+        self._abrir_toplevel(MenuMatrices, "Operaciones con matrices")
 
     def abrir_independencia_lineal(self):
-        self.root.destroy()
-        root2 = tk.Tk()
-        IndependenciaLinealApp(root2, lambda: self.volver_inicio(root2))
-        root2.mainloop()
+        self._abrir_toplevel(IndependenciaLinealApp, "Independencia lineal")
 
     def abrir_transformaciones(self):
-        self.root.destroy()
-        root2 = tk.Tk()
-        TransformacionesLinealesApp(root2, lambda: self.volver_inicio(root2))
-        root2.mainloop()
+        self._abrir_toplevel(TransformacionesLinealesApp, "Transformaciones lineales")
 
     def abrir_metodos_numericos(self):
-        self.root.destroy()
-        root2 = tk.Tk()
-        MenuMetodosNumericos(root2, lambda: self.volver_inicio(root2))
-        root2.mainloop()
+        self._abrir_toplevel(MenuMetodosNumericos, "Métodos numéricos")
 
     def volver_inicio(self, ventana_actual):
-        ventana_actual.destroy()
-        root = tk.Tk()
-        MenuPrincipal(root)
-        root.mainloop()
+        try:
+            ventana_actual.destroy()
+        finally:
+            try:
+                self.root.deiconify()
+            except Exception:
+                pass

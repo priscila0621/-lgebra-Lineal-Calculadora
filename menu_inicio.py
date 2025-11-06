@@ -194,23 +194,52 @@ class MenuInicio:
 
     def _open_algebra(self):
         from menu_algebra import MenuAlgebra
-        self.root.destroy()
-        root2 = tk.Tk()
-        MenuAlgebra(root2)
-        root2.mainloop()
+        # Mantener un solo root y usar Toplevel para conservar el icono en la barra de tareas
+        try:
+            self.root.withdraw()
+            top = tk.Toplevel(self.root)
+
+            def _on_close():
+                try:
+                    self.root.deiconify()
+                finally:
+                    top.destroy()
+
+            top.protocol("WM_DELETE_WINDOW", _on_close)
+            # MenuAlgebra no requiere callback; usa su propia navegación interna
+            MenuAlgebra(top)
+        except Exception:
+            try:
+                self.root.deiconify()
+            except Exception:
+                pass
 
     def _open_numerico(self):
         from menu_metodos_numericos import MenuMetodosNumericos
-        self.root.destroy()
-        root2 = tk.Tk()
-        MenuMetodosNumericos(root2, volver_callback=lambda: self._volver_selector(root2))
-        root2.mainloop()
+        try:
+            self.root.withdraw()
+            top = tk.Toplevel(self.root)
+
+            def _on_close():
+                try:
+                    self.root.deiconify()
+                finally:
+                    top.destroy()
+
+            top.protocol("WM_DELETE_WINDOW", _on_close)
+            MenuMetodosNumericos(top, volver_callback=lambda: _on_close())
+        except Exception:
+            try:
+                self.root.deiconify()
+            except Exception:
+                pass
 
     def _volver_selector(self, ventana_actual):
+        # Mantener compatibilidad si se invoca este flujo
         try:
             ventana_actual.destroy()
-        except Exception:
-            pass
-        root = tk.Tk()
-        MenuInicio(root)
-        root.mainloop()
+        finally:
+            try:
+                self.root.deiconify()
+            except Exception:
+                pass
