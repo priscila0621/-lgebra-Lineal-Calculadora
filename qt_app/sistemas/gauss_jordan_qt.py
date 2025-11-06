@@ -1,13 +1,9 @@
-from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QGridLayout, QLineEdit, QTextEdit, QMessageBox, QFrame,
-    QDialog, QDialogButtonBox, QPlainTextEdit, QSlider
-)
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (\r\n    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,\r\n    QScrollArea, QGridLayout, QLineEdit, QTextEdit, QMessageBox, QFrame,\r\n    QDialog, QDialogButtonBox, QPlainTextEdit, QSlider, QToolButton, QMenu\r\n)
+from PySide6.QtCore import Qt, QSize
 from fractions import Fraction
 from copy import deepcopy
 import re
-from ..theme import bind_font_scale_stylesheet
+from ..theme import bind_font_scale_stylesheet, bind_theme_icon, make_overflow_icon, gear_icon_preferred
 from ..settings_qt import open_settings_dialog
 
 
@@ -112,11 +108,27 @@ class GaussJordanWindow(QMainWindow):
         self.btn_ingresar_ecuaciones.clicked.connect(self._open_ecuaciones_dialog)
         top.addWidget(self.btn_ingresar_ecuaciones)
         top.addSpacing(18)
-        self.btn_settings = QPushButton("Configuracion")
-        self.btn_settings.clicked.connect(self._open_settings)
-        top.addWidget(self.btn_settings)
-        # BotÃ³n de verificaciÃ³n de independencia retirado a peticiÃ³n del usuario
-        top.addStretch(1)
+        more_btn = QToolButton()
+        # sin tamaño fijo
+        more_btn.setAutoRaise(True)
+        more_btn.setCursor(Qt.PointingHandCursor)
+        more_btn.setToolTip("Más opciones")
+        more_btn.setPopupMode(QToolButton.InstantPopup)
+        try:
+            from PySide6.QtCore import QSize
+            from ..theme import bind_theme_icon, make_overflow_icon, gear_icon_preferred
+            bind_theme_icon(more_btn, make_overflow_icon, 20)
+            more_btn.setIconSize(QSize(20, 20))
+        except Exception:
+            pass
+        menu = QMenu(more_btn)
+        try:
+            act_settings = menu.addAction(gear_icon_preferred(22), "Configuración")
+        except Exception:
+            act_settings = menu.addAction("Configuración")
+        act_settings.triggered.connect(self._open_settings)
+        more_btn.setMenu(menu)
+        top.addWidget(more_btn)\r\n        top.addStretch(1)
 
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)

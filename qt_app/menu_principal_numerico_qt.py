@@ -6,16 +6,10 @@ from PySide6.QtWidgets import (
     QPushButton,
     QLabel,
     QFrame,
-    QSizePolicy,
     QToolButton,
     QMenu,
 )
 from PySide6.QtCore import Qt, QSize
-from .menu_matrices_qt import MenuMatricesWindow
-from .menu_sistemas_qt import MenuSistemasWindow
-from .independencia_qt import IndependenciaWindow
-from .transformaciones_qt import TransformacionesWindow
-from .menu_metodos_numericos_qt import MenuMetodosNumericosWindow
 from .theme import (
     install_toggle_shortcut,
     bind_font_scale_stylesheet,
@@ -27,15 +21,13 @@ from .theme import (
     back_icon_preferred,
 )
 from .settings_qt import open_settings_dialog
+from .metodos.biseccion_qt import MetodoBiseccionWindow
 
 
-class MenuPrincipalWindow(QMainWindow):
-    def __init__(self, module: str = "algebra", parent=None):
+class MenuNumericoPrincipalWindow(QMainWindow):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        # Contexto del módulo seleccionado ("algebra" o "all").
-        # Por defecto mostramos solo las opciones de Álgebra Lineal.
-        self.module = (module or "algebra").lower()
-        self.setWindowTitle("Calculadora Álgebra Lineal")
+        self.setWindowTitle("Análisis numérico")
 
         root = QWidget()
         self.setCentralWidget(root)
@@ -58,7 +50,7 @@ class MenuPrincipalWindow(QMainWindow):
             more_btn_global.setIconSize(QSize(20, 20))
         except Exception:
             pass
-        # sin tamaño fijo; dejamos que el layout ajuste
+        # sin tamaño fijo
         gmenu = QMenu(more_btn_global)
         gact_settings = gmenu.addAction(gear_icon_preferred(22), "Configuración")
         gact_settings.triggered.connect(self._open_settings)
@@ -72,7 +64,7 @@ class MenuPrincipalWindow(QMainWindow):
         base.setSpacing(24)
         outer.addWidget(base_container, 1)
 
-        # Navegación lateral
+        # Navegacion lateral
         nav = QFrame()
         nav.setObjectName("NavPanel")
         nav.setFixedWidth(260)
@@ -80,7 +72,7 @@ class MenuPrincipalWindow(QMainWindow):
         nav_lay.setContentsMargins(24, 24, 24, 24)
         nav_lay.setSpacing(18)
 
-        # Botón volver discreto en el panel lateral
+        # Botón volver discreto al inicio del panel lateral
         back_btn = QToolButton()
         back_btn.setObjectName("BackButton")
         back_btn.setText("")
@@ -97,50 +89,27 @@ class MenuPrincipalWindow(QMainWindow):
         back_btn.clicked.connect(self._go_back)
         nav_lay.addWidget(back_btn, 0, Qt.AlignLeft)
 
-        nav_title = QLabel("Menú principal" if self.module != "algebra" else "Álgebra Lineal")
+        # Forzar salto de linea para que no se corte el título
+        nav_title = QLabel("Análisis\nnumérico")
         nav_title.setObjectName("Title")
         nav_title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        nav_title.setWordWrap(True)
         nav_lay.addWidget(nav_title)
 
-        nav_sub = QLabel(
-            "Explora cada módulo especializado."
-            if self.module != "algebra"
-            else "Explora los módulos de álgebra lineal."
-        )
+        nav_sub = QLabel("Módulos disponibles para métodos numéricos.")
         nav_sub.setObjectName("Subtitle")
         nav_sub.setWordWrap(True)
         nav_lay.addWidget(nav_sub)
 
-        self.btn_sistemas = QPushButton("Sistemas de ecuaciones")
-        self.btn_sistemas.setMinimumHeight(44)
-        self.btn_sistemas.clicked.connect(self._open_sistemas)
-        nav_lay.addWidget(self.btn_sistemas)
-
-        self.btn_matrices = QPushButton("Operaciones con matrices")
-        self.btn_matrices.setMinimumHeight(44)
-        self.btn_matrices.clicked.connect(self._open_matrices)
-        nav_lay.addWidget(self.btn_matrices)
-
-        self.btn_independencia = QPushButton("Independencia de vectores")
-        self.btn_independencia.setMinimumHeight(44)
-        self.btn_independencia.clicked.connect(self._open_independencia)
-        nav_lay.addWidget(self.btn_independencia)
-
-        self.btn_transformaciones = QPushButton("Transformaciones lineales")
-        self.btn_transformaciones.setMinimumHeight(44)
-        self.btn_transformaciones.clicked.connect(self._open_transformaciones)
-        nav_lay.addWidget(self.btn_transformaciones)
-
-        self.btn_metodos = QPushButton("Métodos numéricos")
-        self.btn_metodos.setMinimumHeight(44)
-        self.btn_metodos.clicked.connect(self._open_metodos_numericos)
-        # Mostrar solo si el contexto no es exclusivamente algebra
-        if self.module != "algebra":
-            nav_lay.addWidget(self.btn_metodos)
+        # Único módulo disponible por ahora
+        self.btn_biseccion = QPushButton("Método de bisección")
+        self.btn_biseccion.setMinimumHeight(44)
+        self.btn_biseccion.clicked.connect(self._open_biseccion)
+        nav_lay.addWidget(self.btn_biseccion)
 
         nav_lay.addStretch(1)
 
-        # (Se movió la configuración al menú de tres puntos en la esquina superior derecha)
+        # (La configuración se movió al menú de tres puntos en la esquina superior derecha)
 
         about = QLabel(
             "\u00A9 2025 - Priscila Selva - Emma Serrano - Jeyni Orozco\n"
@@ -153,14 +122,14 @@ class MenuPrincipalWindow(QMainWindow):
 
         base.addWidget(nav)
 
-        # Panel principal con informacion
+        # Panel principal con información
         content = QFrame()
         content.setObjectName("Card")
         content_lay = QVBoxLayout(content)
         content_lay.setContentsMargins(32, 32, 32, 32)
         content_lay.setSpacing(20)
 
-        # (Top bar de contenido no necesario; el menú global ya ocupa la esquina superior derecha)
+        # (El menú global ya ocupa la esquina superior derecha)
 
         hero = QHBoxLayout()
         hero.setSpacing(24)
@@ -185,24 +154,13 @@ class MenuPrincipalWindow(QMainWindow):
         hero.addWidget(logo, 0, Qt.AlignTop)
 
         title_box = QVBoxLayout()
-        heading = QLabel(
-            "Nexus Linear - Calculadora Inteligente"
-            if self.module != "algebra"
-            else "Nexus Linear - Álgebra Lineal"
-        )
+        heading = QLabel("Nexus Linear - Análisis numérico")
         heading.setObjectName("Title")
         title_box.addWidget(heading)
 
         strapline = QLabel(
-            (
-                "Una suite profesional para explorar, resolver y visualizar problemas de álgebra lineal. "
-                "Integramos herramientas interactivas para docentes, estudiantes y profesionales."
-            )
-            if self.module == "algebra"
-            else (
-                "Una suite profesional para álgebra lineal y métodos numéricos. "
-                "Integramos herramientas interactivas con resultados claros."
-            )
+            "Herramientas de análisis numérico con enfoque práctico. "
+            "Comienza con bisección para aproximar raíces con trazabilidad clara."
         )
         strapline.setObjectName("Subtitle")
         strapline.setWordWrap(True)
@@ -210,38 +168,27 @@ class MenuPrincipalWindow(QMainWindow):
 
         title_box.addSpacing(8)
 
-        highlights = QLabel(
-            "\u2022 Automatiza cálculos complejos con precisión fraccional.\n"
-            "\u2022 Documenta cada procedimiento con trazabilidad paso a paso.\n"
-            "\u2022 Diseñada para la Universidad de Tecnología: innovación aplicada."
+        details = QLabel(
+            "Disponible ahora:\n"
+            "\u2022 Método de bisección con validación del intervalo y reporte paso a paso."
         )
-        highlights.setWordWrap(True)
-        highlights.setAlignment(Qt.AlignLeft)
-        title_box.addWidget(highlights)
+        details.setWordWrap(True)
+        details.setAlignment(Qt.AlignLeft)
+        title_box.addWidget(details)
 
         hero.addLayout(title_box, 1)
         content_lay.addLayout(hero)
 
         content_lay.addSpacing(12)
 
-        info_title = QLabel(
-            "Acerca de la plataforma" if self.module != "algebra" else "Acerca de Álgebra Lineal"
-        )
+        info_title = QLabel("Acerca del módulo")
         info_title.setObjectName("Subtitle")
         info_title.setStyleSheet("text-decoration: none;")
         content_lay.addWidget(info_title)
 
         info_body = QLabel(
-            (
-                "Nexus Linear centraliza las operaciones más demandadas en álgebra lineal. "
-                "Desde la resolución de sistemas y la manipulación de matrices hasta el análisis de transformaciones, "
-                "cada módulo ofrece una experiencia guiada con resultados instantáneos y explicación pedagógica."
-            )
-            if self.module == "algebra"
-            else (
-                "Nexus Linear integra módulos de álgebra lineal y métodos numéricos con una experiencia unificada. "
-                "Selecciona un módulo para comenzar."
-            )
+            "Este módulo reúne técnicas de análisis numérico orientadas a la docencia y práctica profesional. "
+            "A medida que integremos nuevos métodos, aparecerán en la navegación lateral."
         )
         info_body.setWordWrap(True)
         info_body.setStyleSheet("text-decoration: none;")
@@ -252,25 +199,10 @@ class MenuPrincipalWindow(QMainWindow):
 
         install_toggle_shortcut(self)
 
-    def _open_sistemas(self):
-        self.s = MenuSistemasWindow(parent=self)
-        self.s.showMaximized()
-
-    def _open_matrices(self):
-        self.m = MenuMatricesWindow(parent=self)
-        self.m.showMaximized()
-
-    def _open_independencia(self):
-        self.w = IndependenciaWindow(parent=self)
-        self.w.showMaximized()
-
-    def _open_transformaciones(self):
-        self.w = TransformacionesWindow(parent=self)
-        self.w.showMaximized()
-
-    def _open_metodos_numericos(self):
-        self.w = MenuMetodosNumericosWindow(parent=self)
-        self.w.showMaximized()
+    def _open_biseccion(self):
+        w = MetodoBiseccionWindow(parent=self)
+        w.showMaximized()
+        self._child = w
 
     def _open_settings(self):
         open_settings_dialog(self)

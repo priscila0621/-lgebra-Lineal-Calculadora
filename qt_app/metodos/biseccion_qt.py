@@ -22,10 +22,18 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QDialog,
     QDialogButtonBox,
+    QToolButton,
+    QMenu,
 )
 from PySide6.QtCore import Qt
 
-from ..theme import bind_font_scale_stylesheet, install_toggle_shortcut
+from ..theme import (
+    bind_font_scale_stylesheet,
+    install_toggle_shortcut,
+    bind_theme_icon,
+    make_overflow_icon,
+    gear_icon_preferred,
+)
 from ..settings_qt import open_settings_dialog
 
 
@@ -63,38 +71,38 @@ def _format_number(value: float) -> str:
 def _parse_numeric(text: str) -> float:
     cleaned = (text or "").strip()
     if not cleaned:
-        raise ValueError("Ingrese un numero valido.")
+        raise ValueError("Ingrese un número válido.")
     cleaned = cleaned.replace("^", "**")
     # Evitar que el usuario utilice la variable x en intervalos o tolerancia
     if "x" in cleaned.lower():
-        raise ValueError("Los parametros numericos no deben contener la variable x.")
+        raise ValueError("Los parámetros numéricos no deben contener la variable x.")
     try:
         value = eval(cleaned, {"__builtins__": {}}, dict(_ALLOWED_NAMES))
     except Exception as exc:
-        raise ValueError(f"No se pudo interpretar el numero '{cleaned}': {exc}") from exc
+        raise ValueError(f"No se pudo interpretar el número '{cleaned}': {exc}") from exc
     try:
         return float(value)
     except Exception as exc:
-        raise ValueError(f"El valor '{cleaned}' no es numerico.") from exc
+        raise ValueError(f"El valor '{cleaned}' no es numérico.") from exc
 
 
 def _compile_function(expr: str) -> Callable[[float], float]:
     cleaned = (expr or "").strip()
     if not cleaned:
-        raise ValueError("Ingrese una funcion f(x).")
+        raise ValueError("Ingrese una función f(x).")
     cleaned = cleaned.replace("==", "=")
     if "=" in cleaned:
         parts = cleaned.split("=")
         if len(parts) != 2:
-            raise ValueError("Solo se admite una igualdad del tipo expresion = 0.")
+            raise ValueError("Solo se admite una igualdad del tipo expresión = 0.")
         left, right = (p.strip() for p in parts)
         if not left or not right:
             raise ValueError("Completa ambos lados de la igualdad, por ejemplo: cos(x) - x = 0.")
         cleaned = f"({left}) - ({right})"
     try:
-        code = compile(cleaned, "<funcion>", "eval")
+        code = compile(cleaned, "<función>", "eval")
     except Exception as exc:
-        raise ValueError(f"No se pudo compilar la funcion: {exc}") from exc
+        raise ValueError(f"No se pudo compilar la función: {exc}") from exc
 
     def _fn(x: float) -> float:
         local = dict(_ALLOWED_NAMES)
@@ -102,7 +110,7 @@ def _compile_function(expr: str) -> Callable[[float], float]:
         value = eval(code, {"__builtins__": {}}, local)
         return float(value)
 
-    # Verificacion rapida para detectar errores inmediatos
+    # Verificación rápida para detectar errores inmediatos
     try:
         _ = _fn(0.0)
     except Exception:
@@ -133,7 +141,7 @@ def _run_bisection(
     fa = func(a)
     fb = func(b)
     if not (fa * fb < 0):
-        raise ValueError("El intervalo inicial debe contener la raiz (f(a) * f(b) < 0).")
+        raise ValueError("El intervalo inicial debe contener la raíz (f(a) * f(b) < 0).")
 
     steps: List[BisectionStep] = []
     iteration = 0
@@ -155,7 +163,7 @@ def _run_bisection(
             a = c
             fa = fc
 
-    raise ValueError("El metodo excedio el maximo de iteraciones permitidas.")
+    raise ValueError("El método excedió el máximo de iteraciones permitidas.")
 
 
 class RootInputCard(QFrame):
@@ -240,7 +248,7 @@ class RootInputCard(QFrame):
         self.approx_edit.setPlaceholderText("Ejemplo: 1.2")
         self.approx_edit.setAlignment(Qt.AlignCenter)
         self.approx_edit.setClearButtonEnabled(True)
-        self.approx_edit.setToolTip("Ingresa un valor esperado para comparar, deja vacio si no aplica.")
+        self.approx_edit.setToolTip("Ingresa un valor esperado para comparar, deja vacío si no aplica.")
         grid.addWidget(self.approx_edit, 3, 1, 1, 3)
         grid.setColumnStretch(1, 1)
         grid.setColumnStretch(2, 1)
@@ -255,7 +263,7 @@ class RootInputCard(QFrame):
         self.set_index(index)
 
     def set_index(self, index: int) -> None:
-        self.title.setText(f"Raiz #{index}")
+        self.title.setText(f"Raíz #{index}")
 
     def values(self) -> Tuple[str, str, str, str, str]:
         return (
@@ -270,7 +278,7 @@ class RootInputCard(QFrame):
 class MetodoBiseccionWindow(QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Metodo de Biseccion")
+        self.setWindowTitle("Método de Bisección")
         self.root_cards: List[RootInputCard] = []
 
         central = QWidget()
@@ -295,7 +303,7 @@ class MetodoBiseccionWindow(QMainWindow):
 
         nav_layout.addSpacing(6)
 
-        lbl_roots = QLabel("Cantidad de raices:")
+        lbl_roots = QLabel("Cantidad de raíces:")
         nav_layout.addWidget(lbl_roots)
 
         self.root_count = QSpinBox()
@@ -306,7 +314,7 @@ class MetodoBiseccionWindow(QMainWindow):
 
         nav_layout.addSpacing(12)
 
-        self.btn_calcular = QPushButton("Calcular biseccion")
+        self.btn_calcular = QPushButton("Calcular bisección")
         self.btn_calcular.setMinimumHeight(36)
         self.btn_calcular.clicked.connect(self._calcular)
         nav_layout.addWidget(self.btn_calcular)
@@ -318,9 +326,23 @@ class MetodoBiseccionWindow(QMainWindow):
 
         nav_layout.addStretch(1)
 
-        self.btn_settings = QPushButton("Configuracion")
-        self.btn_settings.clicked.connect(self._open_settings)
-        nav_layout.addWidget(self.btn_settings, 0, Qt.AlignVCenter)
+        more_btn = QToolButton()
+        more_btn.setAutoRaise(True)
+        more_btn.setCursor(Qt.PointingHandCursor)
+        more_btn.setToolTip("Más opciones")
+        more_btn.setPopupMode(QToolButton.InstantPopup)
+        try:
+            from PySide6.QtCore import QSize
+            bind_theme_icon(more_btn, make_overflow_icon, 20)
+            more_btn.setIconSize(QSize(20, 20))
+        except Exception:
+            pass
+        # sin tamaño fijo
+        menu = QMenu(more_btn)
+        act_settings = menu.addAction(gear_icon_preferred(22), "Configuración")
+        act_settings.triggered.connect(self._open_settings)
+        more_btn.setMenu(menu)
+        nav_layout.addWidget(more_btn, 0, Qt.AlignVCenter)
 
         outer.addWidget(nav)
 
@@ -330,21 +352,21 @@ class MetodoBiseccionWindow(QMainWindow):
         card_layout.setContentsMargins(32, 28, 32, 28)
         card_layout.setSpacing(18)
 
-        title = QLabel("Metodo de Biseccion")
+        title = QLabel("Método de Bisección")
         title.setObjectName("Title")
         card_layout.addWidget(title)
 
         subtitle = QLabel(
-            "Ingresa la funcion, el intervalo [a, b] y la tolerancia para cada raiz. "
-            "El metodo aplicara el criterio de paro |f(c)| < tolerancia exactamente como lo solicita el profesor."
+            "Ingresa la función, el intervalo [a, b] y la tolerancia para cada raíz. "
+            "El método aplicará el criterio de paro |f(c)| < tolerancia exactamente como lo solicita el profesor."
         )
         subtitle.setObjectName("Subtitle")
         subtitle.setWordWrap(True)
         card_layout.addWidget(subtitle)
 
         subtitle_2 = QLabel(
-            "Puedes calcular hasta diez raices en una sola ejecucion. Cada conjunto respetara el intervalo y "
-            "validara que f(a) y f(b) tengan signos opuestos antes de iniciar."
+            "Puedes calcular hasta diez raíces en una sola ejecución. Cada conjunto respetará el intervalo y "
+            "validará que f(a) y f(b) tengan signos opuestos antes de iniciar."
         )
         subtitle_2.setObjectName("Subtitle")
         subtitle_2.setWordWrap(True)
@@ -432,7 +454,7 @@ class MetodoBiseccionWindow(QMainWindow):
                 QMessageBox.warning(
                     self,
                     "Aviso",
-                    f"No se pudo calcular la raiz #{idx}: {exc}",
+                    f"No se pudo calcular la raíz #{idx}: {exc}",
                 )
                 return
             resultados.append((idx, expr, pasos, raiz, fc, iteraciones, approx_value))
@@ -443,7 +465,7 @@ class MetodoBiseccionWindow(QMainWindow):
         table = QTableWidget()
         table.setColumnCount(7)
         table.setHorizontalHeaderLabels(
-            ["Iteracion", "a", "b", "c", "f(a)", "f(b)", "f(c)"]
+            ["Iteración", "a", "b", "c", "f(a)", "f(b)", "f(c)"]
         )
         table.setRowCount(len(pasos))
         table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -501,22 +523,22 @@ class MetodoBiseccionWindow(QMainWindow):
             layout.setContentsMargins(28, 24, 28, 24)
             layout.setSpacing(18)
 
-            title = QLabel(f"Raiz #{idx} - f(x) = {expr}")
+            title = QLabel(f"Raíz #{idx} - f(x) = {expr}")
             title.setObjectName("Subtitle")
             layout.addWidget(title)
 
             raiz_txt = _format_number(raiz)
             error_txt = _format_number(abs(fc))
             summary_lines = [
-                f"El metodo converge con {iteraciones} iteraciones.",
-                f"La raiz es: {raiz_txt}.",
+                f"El método converge con {iteraciones} iteraciones.",
+                f"La raíz es: {raiz_txt}.",
                 f"El margen de error es: {error_txt}.",
             ]
             if approx_value is not None:
                 approx_txt = _format_number(approx_value)
                 diff_txt = _format_number(abs(raiz - approx_value))
                 summary_lines.append(
-                    f"Comparacion con tu valor aproximado {approx_txt}: diferencia = {diff_txt}."
+                    f"Comparación con tu valor aproximado {approx_txt}: diferencia = {diff_txt}."
                 )
             summary = QLabel("\n".join(summary_lines))
             summary.setWordWrap(True)
@@ -564,7 +586,7 @@ class MetodoBiseccionWindow(QMainWindow):
             if widget:
                 widget.setParent(None)
         placeholder = QLabel(
-            "Los resultados apareceran aqui una vez que ejecutes el metodo."
+            "Los resultados aparecerán aquí una vez que ejecutes el método."
         )
         placeholder.setAlignment(Qt.AlignCenter)
         bind_font_scale_stylesheet(

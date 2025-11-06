@@ -17,15 +17,16 @@ from .theme import (
     set_font_family,
     current_mode,
     apply_theme,
+    gear_icon_preferred,
 )
 
 
 _FONT_SIZE_OPTIONS = [
     ("Letra compacta", 0.9),
-    ("Letra estandar", 1.0),
+    ("Letra estándar", 1.0),
     ("Letra grande", 1.2),
     ("Letra extra grande", 1.35),
-    ("Letra maxima", 1.5),
+    ("Letra máxima", 1.5),
 ]
 
 _FONT_FAMILY_OPTIONS = [
@@ -42,7 +43,7 @@ _FONT_FAMILY_OPTIONS = [
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Configuracion de interfaz")
+        self.setWindowTitle("Configuración de interfaz")
         self.setModal(True)
         # Icono de ventana: engranaje sin fondo
         try:
@@ -74,9 +75,17 @@ class SettingsDialog(QDialog):
         gear.setAlignment(Qt.AlignCenter)
         gear.setStyleSheet("font-size: 24px; background: transparent;")
         header_row.addWidget(gear, 0, Qt.AlignVCenter)
+        # Reemplazar el texto por el icono subido si está disponible
+        try:
+            icon = gear_icon_preferred(24)
+            gear.setText("")
+            gear.setPixmap(icon.pixmap(24, 24))
+            self.setWindowIcon(gear_icon_preferred(32))
+        except Exception:
+            pass
 
         title_box = QVBoxLayout()
-        title = QLabel("Configuracion de interfaz")
+        title = QLabel("Configuración de interfaz")
         title.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         title.setStyleSheet("font-weight:700; font-size:18px;")
         subtitle = QLabel("Personaliza la apariencia de la calculadora")
@@ -111,7 +120,7 @@ class SettingsDialog(QDialog):
             key=lambda i: abs(self.font_scale_combo.itemData(i) - current_scale),
         )
         self.font_scale_combo.setCurrentIndex(idx_scale)
-        form.addRow("Tamano de letra:", self.font_scale_combo)
+        form.addRow("Tamaño de letra:", self.font_scale_combo)
 
         # Familia tipografica
         self.font_family_combo = QComboBox()

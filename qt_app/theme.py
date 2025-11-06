@@ -1,4 +1,5 @@
 import weakref
+import os
 
 from PySide6.QtWidgets import QApplication, QCheckBox
 from PySide6.QtGui import (
@@ -10,6 +11,8 @@ from PySide6.QtGui import (
     QPainter,
     QPen,
     QBrush,
+    QIcon,
+    QPixmap,
 )
 from PySide6.QtCore import (
     Qt,
@@ -534,3 +537,165 @@ def install_toggle_shortcut(window) -> None:
             sw.blockSignals(False)
 
     sc.activated.connect(_activate)
+
+
+def make_back_icon(size: int = 26, color: QColor | None = None, thickness: int = 3) -> QIcon:
+    """Crea un ícono de chevron hacia la izquierda, sin fondo.
+
+    - size: tamaño cuadrado del ícono en píxeles
+    - color: si no se indica, usa el color de texto del tema actual
+    - thickness: grosor del trazo
+    """
+    app = QApplication.instance()
+    if color is None:
+        try:
+            color = app.palette().windowText().color() if app else QColor("#6E4B5E")
+        except Exception:
+            color = QColor("#6E4B5E")
+    pm = QPixmap(size, size)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing)
+    pen = QPen(color, max(1, thickness), Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    p.setPen(pen)
+    s = float(size)
+    # Chevron: dos líneas en ángulo
+    p.drawLine(int(0.66 * s), int(0.22 * s), int(0.40 * s), int(0.50 * s))
+    p.drawLine(int(0.40 * s), int(0.50 * s), int(0.66 * s), int(0.78 * s))
+    p.end()
+    return QIcon(pm)
+
+
+def make_gear_icon(size: int = 28, color: QColor | None = None, thickness: int = 2, teeth: int = 8) -> QIcon:
+    """Dibuja un ícono de engranaje minimalista, sin fondo.
+
+    Se basa en un anillo central y dientes como trazos radiales.
+    """
+    app = QApplication.instance()
+    if color is None:
+        try:
+            color = app.palette().windowText().color() if app else QColor("#6E4B5E")
+        except Exception:
+            color = QColor("#6E4B5E")
+    pm = QPixmap(size, size)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing)
+    pen = QPen(color, max(1, thickness), Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    p.setPen(pen)
+
+    s = float(size)
+    cx, cy = s / 2.0, s / 2.0
+    r_inner = s * 0.22
+    r_ring = s * 0.32
+    r_outer = s * 0.42
+
+    # Anillo central
+    p.drawEllipse(int(cx - r_ring), int(cy - r_ring), int(2 * r_ring), int(2 * r_ring))
+    # Agujero interior (solo contorno del anillo ya sugiere el hueco)
+
+    # Dientes (trazos radiales cortos)
+    for i in range(teeth):
+        angle = (i * 360.0 / teeth) * 3.14159265 / 180.0
+        ax = cx + r_ring * float(__import__("math").cos(angle))
+        ay = cy + r_ring * float(__import__("math").sin(angle))
+        bx = cx + r_outer * float(__import__("math").cos(angle))
+        by = cy + r_outer * float(__import__("math").sin(angle))
+        p.drawLine(int(ax), int(ay), int(bx), int(by))
+
+    # Detalle de cubo interno:
+    p.drawEllipse(int(cx - r_inner), int(cy - r_inner), int(2 * r_inner), int(2 * r_inner))
+    p.end()
+    return QIcon(pm)
+
+
+def bind_theme_icon(tool_button, maker, *args, **kwargs) -> None:
+    """Vincula un QToolButton para regenerar su ícono cuando cambia el tema."""
+    import weakref as _weak
+
+    ref = _weak.ref(tool_button)
+
+    def _apply():
+        btn = ref()
+        if btn is None:
+            try:
+                theme_changed_signal().disconnect(_apply)
+            except Exception:
+                pass
+            return
+        try:
+            icon = maker(*args, **kwargs)
+            btn.setIcon(icon)
+        except Exception:
+            pass
+
+    _apply()
+    theme_changed_signal().connect(lambda _mode: _apply())
+
+
+def make_overflow_icon(size: int = 20, color: QColor | None = None) -> QIcon:
+    """Dibuja el ícono de tres puntos verticales (overflow) sin fondo."""
+    app = QApplication.instance()
+    if color is None:
+        try:
+            color = app.palette().windowText().color() if app else QColor("#6E4B5E")
+        except Exception:
+            color = QColor("#6E4B5E")
+    pm = QPixmap(size, size)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing)
+    p.setPen(Qt.NoPen)
+    p.setBrush(color)
+    s = float(size)
+    r = max(2.0, s * 0.08)
+    cx = s * 0.5
+    ys = [s * 0.25, s * 0.50, s * 0.75]
+    for y in ys:
+        p.drawEllipse(int(cx - r), int(y - r), int(2 * r), int(2 * r))
+    p.end()
+    return QIcon(pm)
+
+
+# ---- Iconos desde assets (si existen) ----
+def _project_root() -> str:
+    here = os.path.dirname(os.path.abspath(__file__))
+    return os.path.abspath(os.path.join(here, os.pardir))
+
+
+def _icon_path_candidates(base_name: str, exts=(".svg", ".png")):
+    """Genera rutas candidatas en assets/icons para claro/oscuro."""
+    root = _project_root()
+    base = os.path.join(root, "assets", "icons")
+    # Prioridad por modo
+    mode = current_mode(QApplication.instance())
+    names = [f"{base_name}_{mode}", base_name]
+    for name in names:
+        for ext in exts:
+            yield os.path.join(base, name + ext)
+
+
+def _icon_from_assets(base_name: str) -> QIcon | None:
+    for path in _icon_path_candidates(base_name):
+        try:
+            if os.path.exists(path):
+                pm = QPixmap(path)
+                if not pm.isNull():
+                    return QIcon(pm)
+        except Exception:
+            pass
+    return None
+
+
+def gear_icon_preferred(size: int = 28) -> QIcon:
+    icon = _icon_from_assets("settings")
+    if icon is not None:
+        return icon
+    return make_gear_icon(size=size)
+
+
+def back_icon_preferred(size: int = 24) -> QIcon:
+    icon = _icon_from_assets("back")
+    if icon is not None:
+        return icon
+    return make_back_icon(size=size)

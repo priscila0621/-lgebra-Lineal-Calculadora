@@ -6,9 +6,11 @@ from PySide6.QtWidgets import (
     QPushButton,
     QLabel,
     QFrame,
+    QToolButton,
+    QMenu,
 )
 from PySide6.QtCore import Qt, QSize
-from .theme import install_toggle_shortcut
+from .theme import install_toggle_shortcut, bind_theme_icon, make_overflow_icon, gear_icon_preferred
 from .settings_qt import open_settings_dialog
 from .metodos.biseccion_qt import MetodoBiseccionWindow
 
@@ -16,7 +18,7 @@ from .metodos.biseccion_qt import MetodoBiseccionWindow
 class MenuMetodosNumericosWindow(QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Metodos Numericos")
+        self.setWindowTitle("Métodos Numéricos")
 
         container = QWidget()
         self.setCentralWidget(container)
@@ -41,16 +43,29 @@ class MenuMetodosNumericosWindow(QMainWindow):
 
         top_layout.addSpacing(6)
 
-        btn_biseccion = QPushButton("Metodo de Biseccion")
+        btn_biseccion = QPushButton("Método de Bisección")
         btn_biseccion.setMinimumHeight(36)
         btn_biseccion.clicked.connect(self._open_biseccion)
         top_layout.addWidget(btn_biseccion)
 
         top_layout.addStretch(1)
 
-        btn_settings = QPushButton("Configuracion")
-        btn_settings.clicked.connect(self._open_settings)
-        top_layout.addWidget(btn_settings, 0, Qt.AlignVCenter)
+        more_btn = QToolButton()
+        more_btn.setAutoRaise(True)
+        more_btn.setCursor(Qt.PointingHandCursor)
+        more_btn.setToolTip("Más opciones")
+        more_btn.setPopupMode(QToolButton.InstantPopup)
+        try:
+            bind_theme_icon(more_btn, make_overflow_icon, 20)
+            more_btn.setIconSize(QSize(20, 20))
+        except Exception:
+            pass
+        # sin tamaño fijo
+        menu = QMenu(more_btn)
+        act_settings = menu.addAction(gear_icon_preferred(22), "Configuración")
+        act_settings.triggered.connect(self._open_settings)
+        more_btn.setMenu(menu)
+        top_layout.addWidget(more_btn, 0, Qt.AlignVCenter)
 
         outer.addWidget(top_bar)
 
@@ -60,13 +75,13 @@ class MenuMetodosNumericosWindow(QMainWindow):
         card_layout.setContentsMargins(32, 28, 32, 28)
         card_layout.setSpacing(16)
 
-        title = QLabel("Metodos Numericos")
+        title = QLabel("Métodos Numéricos")
         title.setObjectName("Title")
         card_layout.addWidget(title)
 
         subtitle = QLabel(
-            "Centraliza tecnicas de analisis numerico para aproximar raices y resolver problemas complejos "
-            "de forma guiada. Selecciona un metodo desde la barra superior para comenzar."
+            "Centraliza técnicas de análisis numérico para aproximar raíces y resolver problemas complejos "
+            "de forma guiada. Selecciona un método desde la barra superior para comenzar."
         )
         subtitle.setObjectName("Subtitle")
         subtitle.setWordWrap(True)
@@ -76,10 +91,10 @@ class MenuMetodosNumericosWindow(QMainWindow):
 
         details = QLabel(
             "Disponible ahora:\n"
-            "- Metodo de Biseccion con reporte paso a paso, resumen destacado y validaciones del intervalo.\n"
+            "- Método de Bisección con reporte paso a paso, resumen destacado y validaciones del intervalo.\n"
             "\nEn desarrollo:\n"
-            "- Nuevos metodos de aproximacion con interfaces interactivas.\n"
-            "- Integracion con historiales para comparar iteraciones clave."
+            "- Nuevos métodos de aproximación con interfaces interactivas.\n"
+            "- Integración con historiales para comparar iteraciones clave."
         )
         details.setWordWrap(True)
         card_layout.addWidget(details)
