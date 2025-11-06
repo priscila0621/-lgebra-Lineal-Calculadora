@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QToolButton,
     QMenu,
     QStyle,
+    QListWidget,
 )
 from PySide6.QtCore import Qt, QObject, QEvent
 from PySide6.QtGui import QFontMetrics
@@ -198,6 +199,144 @@ def _run_bisection(
             fa = fc
 
     raise ValueError("El método excedió el máximo de iteraciones permitidas.")
+
+
+def _detect_sign_change_intervals(
+    func: Callable[[float], float],
+    start: float = -10.0,
+    end: float = 10.0,
+    step: float = 0.5,
+) -> List[Tuple[float, float]]:
+    """
+    Scanea el rango [start, end] con paso `step` y devuelve una lista de
+    intervalos (a, b) donde la función cambia de signo (f(a)*f(b) < 0).
+
+    Valores que provocan excepciones o no finitos se ignoran.
+    """
+    intervals: List[Tuple[float, float]] = []
+    if step <= 0:
+        raise ValueError("El paso debe ser positivo.")
+    # Asegurar start <= end
+    if start > end:
+        start, end = end, start
+    # Número de pasos aproximado
+    n_steps = max(1, int(math.ceil((end - start) / step)))
+    xs = [start + i * step for i in range(n_steps + 1)]
+    # Asegurar que el último valor sea exactamente end
+    if xs[-1] < end:
+        xs.append(end)
+
+    prev_x = None
+    prev_y = None
+    for x in xs:
+        try:
+            y = func(float(x))
+            if not isfinite(y):
+                # ignorar
+                prev_x, prev_y = x, None
+                continue
+        except Exception:
+            prev_x, prev_y = x, None
+            continue
+
+        if prev_x is not None and prev_y is not None:
+            try:
+                if prev_y * y < 0:
+                    intervals.append((prev_x, x))
+            except Exception:
+                pass
+
+        prev_x, prev_y = x, y
+
+    return intervals
+
+
+class IntervalsDialog(QDialog):
+    """Dialogo que muestra los intervalos detectados y permite ajustar
+    start/end/step antes de confirmar."""
+
+    def __init__(self, parent, func: Callable[[float], float], start: float = -10.0, end: float = 10.0, step: float = 0.5):
+        super().__init__(parent)
+        self.setWindowTitle("Intervalos detectados")
+        self.resize(560, 420)
+        self.func = func
+
+        layout = QVBoxLayout(self)
+
+        info = QLabel("Se encontraron los siguientes intervalos donde f(x) cambia de signo. "
+                      "Puedes ajustar los parámetros de búsqueda y volver a detectar.")
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        params_row = QHBoxLayout()
+        params_row.addWidget(QLabel("Inicio:"))
+        self.start_edit = QLineEdit(str(start))
+        self.start_edit.setFixedWidth(100)
+        params_row.addWidget(self.start_edit)
+        params_row.addWidget(QLabel("Fin:"))
+        self.end_edit = QLineEdit(str(end))
+        self.end_edit.setFixedWidth(100)
+        params_row.addWidget(self.end_edit)
+        params_row.addWidget(QLabel("Paso:"))
+        self.step_edit = QLineEdit(str(step))
+        self.step_edit.setFixedWidth(100)
+        params_row.addWidget(self.step_edit)
+        params_row.addStretch(1)
+        layout.addLayout(params_row)
+
+        btn_row = QHBoxLayout()
+        self.refresh_btn = QPushButton("Detectar")
+        self.refresh_btn.clicked.connect(self._on_refresh)
+        btn_row.addWidget(self.refresh_btn)
+        btn_row.addStretch(1)
+        layout.addLayout(btn_row)
+
+        self.list_widget = QListWidget()
+        layout.addWidget(self.list_widget, 1)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        # inicializar lista
+        self._run_detection()
+
+    def _run_detection(self):
+        try:
+            s = _parse_numeric(self.start_edit.text())
+            e = _parse_numeric(self.end_edit.text())
+            st = _parse_numeric(self.step_edit.text())
+        except Exception as exc:
+            QMessageBox.warning(self, "Parámetros inválidos", f"Parámetros de búsqueda inválidos: {exc}")
+            return
+        try:
+            intervals = _detect_sign_change_intervals(self.func, s, e, st)
+        except Exception as exc:
+            QMessageBox.warning(self, "Error", f"No se pudo detectar intervalos: {exc}")
+            intervals = []
+
+        self.list_widget.clear()
+        for a, b in intervals:
+            self.list_widget.addItem(f"[{_format_number(a)}, {_format_number(b)}]")
+
+        if not intervals:
+            self.list_widget.addItem("(No se detectaron intervalos en los parámetros provistos.)")
+
+    def _on_refresh(self):
+        self._run_detection()
+
+    def get_intervals(self) -> List[Tuple[float, float]]:
+        try:
+            s = _parse_numeric(self.start_edit.text())
+            e = _parse_numeric(self.end_edit.text())
+            st = _parse_numeric(self.step_edit.text())
+        except Exception:
+            return []
+        try:
+            return _detect_sign_change_intervals(self.func, s, e, st)
+        except Exception:
+            return []
 
 
 class RootInputCard(QFrame):
@@ -534,27 +673,84 @@ class MetodoBiseccionWindow(QMainWindow):
 
     def _calcular(self):
         resultados = []
-        for idx, card in enumerate(self.root_cards, start=1):
+        display_idx = 1
+
+        for card_idx, card in enumerate(self.root_cards, start=1):
             expr, a_txt, b_txt, tol_txt, approx_txt = card.values()
+            if not expr:
+                # Saltar tarjetas vacías
+                continue
+
             try:
                 func = _compile_function(expr)
-                a = _parse_numeric(a_txt)
-                b = _parse_numeric(b_txt)
+            except Exception as exc:
+                QMessageBox.warning(self, "Aviso", f"La función en la tarjeta #{card_idx} no es válida: {exc}")
+                return
+
+            # Tolerancia (obligatoria)
+            try:
                 tol = _parse_numeric(tol_txt)
                 if tol <= 0:
                     raise ValueError("La tolerancia debe ser positiva.")
-                approx_value = None
-                if approx_txt:
-                    approx_value = _parse_numeric(approx_txt)
-                pasos, raiz, fc, iteraciones = _run_bisection(func, a, b, tol)
             except Exception as exc:
-                QMessageBox.warning(
-                    self,
-                    "Aviso",
-                    f"No se pudo calcular la raíz #{idx}: {exc}",
-                )
+                QMessageBox.warning(self, "Aviso", f"Tolerancia inválida en la tarjeta #{card_idx}: {exc}")
                 return
-            resultados.append((idx, expr, pasos, raiz, fc, iteraciones, approx_value))
+
+            approx_value = None
+            if approx_txt:
+                try:
+                    approx_value = _parse_numeric(approx_txt)
+                except Exception:
+                    approx_value = None
+
+            # Si el usuario proporcionó ambos extremos, usar ese único intervalo
+            if a_txt and b_txt:
+                try:
+                    a = _parse_numeric(a_txt)
+                    b = _parse_numeric(b_txt)
+                except Exception as exc:
+                    QMessageBox.warning(self, "Aviso", f"Intervalo inválido en la tarjeta #{card_idx}: {exc}")
+                    return
+
+                try:
+                    pasos, raiz, fc, iteraciones = _run_bisection(func, a, b, tol)
+                    resultados.append((display_idx, expr, pasos, raiz, fc, iteraciones, approx_value))
+                    display_idx += 1
+                except Exception as exc:
+                    QMessageBox.warning(self, "Aviso", f"No se pudo calcular la raíz (intervalo [{a}, {b}]): {exc}")
+                    # continuar con las demás tarjetas
+                    continue
+
+            else:
+                # No se ingresó intervalo: detectar automáticamente
+                dlg = IntervalsDialog(self, func, start=-10.0, end=10.0, step=0.5)
+                if dlg.exec() != QDialog.Accepted:
+                    # El usuario canceló; abortar la operación completa
+                    return
+                intervals = dlg.get_intervals()
+                if not intervals:
+                    QMessageBox.warning(self, "Aviso", "No se detectaron intervalos donde la función cambie de signo.")
+                    return
+
+                any_success = False
+                for a, b in intervals:
+                    try:
+                        pasos, raiz, fc, iteraciones = _run_bisection(func, a, b, tol)
+                        resultados.append((display_idx, expr, pasos, raiz, fc, iteraciones, approx_value))
+                        display_idx += 1
+                        any_success = True
+                    except Exception as exc:
+                        # Mostrar pero continuar con otros intervalos
+                        QMessageBox.warning(self, "Aviso", f"Bisección en [{a}, {b}] falló: {exc}")
+                        continue
+
+                if not any_success:
+                    QMessageBox.warning(self, "Aviso", "No se encontraron raíces en los intervalos detectados.")
+                    return
+
+        if not resultados:
+            QMessageBox.information(self, "Resultados", "No se encontraron raíces para las funciones ingresadas.")
+            return
 
         self._render_resultados(resultados)
         self._draw_results_on_canvas(resultados)
