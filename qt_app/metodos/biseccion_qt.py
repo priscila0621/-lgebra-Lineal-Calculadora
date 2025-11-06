@@ -53,6 +53,22 @@ _ALLOWED_NAMES.update(
         "pow": pow,
         "pi": math.pi,
         "e": math.e,
+        # Alias comunes
+        "ln": math.log,
+        # Trigonométricas en español y variantes
+        "sen": math.sin,
+        "tg": math.tan,
+        "ctg": (lambda x: 1.0 / math.tan(x)),
+        "cosec": (lambda x: 1.0 / math.sin(x)),
+        "csc": (lambda x: 1.0 / math.sin(x)),
+        "sec": (lambda x: 1.0 / math.cos(x)),
+        # Inversas/arcotrigonométricas
+        "arcsen": math.asin,
+        "asen": math.asin,
+        "arctg": math.atan,
+        "atg": math.atan,
+        # Otros alias útiles
+        "raiz": math.sqrt,
     }
 )
 
@@ -108,6 +124,8 @@ def _parse_numeric(text: str) -> float:
     if not cleaned:
         raise ValueError("Ingrese un número válido.")
     cleaned = cleaned.replace("^", "**")
+    cleaned = cleaned.replace("{", "(").replace("}", ")")
+    cleaned = cleaned.replace("{", "(").replace("}", ")")
     # Evitar que el usuario utilice la variable x en intervalos o tolerancia
     if "x" in cleaned.lower():
         raise ValueError("Los parámetros numéricos no deben contener la variable x.")
@@ -126,6 +144,7 @@ def _compile_function(expr: str) -> Callable[[float], float]:
     if not cleaned:
         raise ValueError("Ingrese una función f(x).")
     cleaned = cleaned.replace("==", "=")
+    cleaned = cleaned.replace("^", "**").replace("{", "(").replace("}", ")")
     if "=" in cleaned:
         parts = cleaned.split("=")
         if len(parts) != 2:
@@ -364,17 +383,17 @@ class RootInputCard(QFrame):
         grid.setVerticalSpacing(12)
         layout.addLayout(grid)
 
-        lbl_func = QLabel("f(x):")
-        lbl_func.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        grid.addWidget(lbl_func, 0, 0)
+        self.lbl_func = QLabel("f(x):")
+        self.lbl_func.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        grid.addWidget(self.lbl_func, 0, 0)
         self.function_edit = QLineEdit()
         self.function_edit.setPlaceholderText("Ejemplo: x**3 - x - 2")
         self.function_edit.setClearButtonEnabled(True)
         grid.addWidget(self.function_edit, 0, 1, 1, 2)
 
-        lbl_intervalo = QLabel("Intervalo [a, b]:")
-        lbl_intervalo.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        grid.addWidget(lbl_intervalo, 1, 0)
+        self.lbl_intervalo = QLabel("Intervalo [a, b]:")
+        self.lbl_intervalo.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        grid.addWidget(self.lbl_intervalo, 1, 0)
 
         interval_widget = QWidget()
         interval_layout = QHBoxLayout(interval_widget)
@@ -403,20 +422,21 @@ class RootInputCard(QFrame):
 
         interval_layout.addStretch(1)
 
-        grid.addWidget(interval_widget, 1, 1, 1, 3)
+        self.interval_widget = interval_widget
+        grid.addWidget(self.interval_widget, 1, 1, 1, 3)
 
-        lbl_tol = QLabel("Tolerancia:")
-        lbl_tol.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        grid.addWidget(lbl_tol, 2, 0)
+        self.lbl_tol = QLabel("Tolerancia:")
+        self.lbl_tol.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        grid.addWidget(self.lbl_tol, 2, 0)
         self.tol_edit = QLineEdit()
         self.tol_edit.setPlaceholderText("Ejemplo: 0.0001")
         self.tol_edit.setAlignment(Qt.AlignCenter)
         self.tol_edit.setClearButtonEnabled(True)
         grid.addWidget(self.tol_edit, 2, 1, 1, 3)
 
-        lbl_aprox = QLabel("Valor aproximado (opcional):")
-        lbl_aprox.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        grid.addWidget(lbl_aprox, 3, 0)
+        self.lbl_aprox = QLabel("Valor aproximado (opcional):")
+        self.lbl_aprox.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        grid.addWidget(self.lbl_aprox, 3, 0)
         self.approx_edit = QLineEdit()
         self.approx_edit.setPlaceholderText("Ejemplo: 1.2")
         self.approx_edit.setAlignment(Qt.AlignCenter)
@@ -434,6 +454,19 @@ class RootInputCard(QFrame):
         )
 
         self.set_index(index)
+
+    def set_primary_mode(self, is_primary: bool) -> None:
+        # En modo primario: mostrar todos los campos.
+        # En modo secundario: solo pedir intervalos; ocultar f(x), tolerancia y aproximado.
+        for w in (
+            self.lbl_func,
+            self.function_edit,
+            self.lbl_tol,
+            self.tol_edit,
+            self.lbl_aprox,
+            self.approx_edit,
+        ):
+            w.setVisible(is_primary)
 
     def set_index(self, index: int) -> None:
         self.title.setText(f"Raíz #{index}")
@@ -534,16 +567,16 @@ class MetodoBiseccionWindow(QMainWindow):
         card_layout.addWidget(title)
 
         subtitle = QLabel(
-            "Ingresa la función, el intervalo [a, b] y la tolerancia para cada raíz. "
-            "El método aplicará el criterio de paro |f(c)| < tolerancia exactamente como lo solicita el profesor."
+            "Para la primera raíz ingresa f(x), el intervalo [a, b], la tolerancia y (opcional) un aproximado. "
+            "Para las siguientes raíces solo ingresa el intervalo [a, b]."
         )
         subtitle.setObjectName("Subtitle")
         subtitle.setWordWrap(True)
         card_layout.addWidget(subtitle)
 
         subtitle_2 = QLabel(
-            "Puedes calcular hasta diez raíces en una sola ejecución. Cada conjunto respetará el intervalo y "
-            "validará que f(a) y f(b) tengan signos opuestos antes de iniciar."
+            "Puedes calcular hasta diez raíces reutilizando la misma f(x) y tolerancia de la primera. "
+            "Cada intervalo validará que f(a) y f(b) tengan signos opuestos antes de iniciar."
         )
         subtitle_2.setObjectName("Subtitle")
         subtitle_2.setWordWrap(True)
@@ -646,6 +679,8 @@ class MetodoBiseccionWindow(QMainWindow):
             card.setParent(None)
         for idx, card in enumerate(self.root_cards, start=1):
             card.set_index(idx)
+            # Solo la primera raíz muestra f(x), tolerancia y aproximado
+            card.set_primary_mode(idx == 1)
         # Conectar señales para actualizar la gráfica interactiva
         for card in self.root_cards:
             try:
@@ -675,81 +710,98 @@ class MetodoBiseccionWindow(QMainWindow):
         resultados = []
         display_idx = 1
 
-        for card_idx, card in enumerate(self.root_cards, start=1):
-            expr, a_txt, b_txt, tol_txt, approx_txt = card.values()
-            if not expr:
-                # Saltar tarjetas vacías
-                continue
+        if not self.root_cards:
+            QMessageBox.warning(self, "Aviso", "No hay formularios disponibles.")
+            return
 
+        # Tomar función y tolerancia de la primera raíz
+        first_card = self.root_cards[0]
+        expr1, a1_txt, b1_txt, tol1_txt, approx1_txt = first_card.values()
+        expr1 = (expr1 or "").strip()
+        if not expr1:
+            QMessageBox.warning(self, "Aviso", "Ingresa la función f(x) en la primera raíz.")
+            return
+        try:
+            func = _compile_function(expr1)
+        except Exception as exc:
+            QMessageBox.warning(self, "Aviso", f"La función en la primera raíz no es válida: {exc}")
+            return
+
+        try:
+            tol = _parse_numeric(tol1_txt)
+            if tol <= 0:
+                raise ValueError("La tolerancia debe ser positiva.")
+        except Exception as exc:
+            QMessageBox.warning(self, "Aviso", f"Tolerancia inválida (primera raíz): {exc}")
+            return
+
+        approx1_value = None
+        if approx1_txt:
             try:
-                func = _compile_function(expr)
-            except Exception as exc:
-                QMessageBox.warning(self, "Aviso", f"La función en la tarjeta #{card_idx} no es válida: {exc}")
-                return
+                approx1_value = _parse_numeric(approx1_txt)
+            except Exception:
+                approx1_value = None
 
-            # Tolerancia (obligatoria)
+        # Procesar primera raíz (permite detección automática si no hay [a,b])
+        if a1_txt and b1_txt:
             try:
-                tol = _parse_numeric(tol_txt)
-                if tol <= 0:
-                    raise ValueError("La tolerancia debe ser positiva.")
+                a1 = _parse_numeric(a1_txt)
+                b1 = _parse_numeric(b1_txt)
             except Exception as exc:
-                QMessageBox.warning(self, "Aviso", f"Tolerancia inválida en la tarjeta #{card_idx}: {exc}")
+                QMessageBox.warning(self, "Aviso", f"Intervalo inválido (primera raíz): {exc}")
                 return
-
-            approx_value = None
-            if approx_txt:
-                try:
-                    approx_value = _parse_numeric(approx_txt)
-                except Exception:
-                    approx_value = None
-
-            # Si el usuario proporcionó ambos extremos, usar ese único intervalo
-            if a_txt and b_txt:
-                try:
-                    a = _parse_numeric(a_txt)
-                    b = _parse_numeric(b_txt)
-                except Exception as exc:
-                    QMessageBox.warning(self, "Aviso", f"Intervalo inválido en la tarjeta #{card_idx}: {exc}")
-                    return
-
+            try:
+                pasos, raiz, fc, iteraciones = _run_bisection(func, a1, b1, tol)
+                resultados.append((display_idx, expr1, pasos, raiz, fc, iteraciones, approx1_value))
+                display_idx += 1
+            except Exception as exc:
+                QMessageBox.warning(self, "Aviso", f"No se pudo calcular la raíz (intervalo [{a1}, {b1}]): {exc}")
+        else:
+            # Detección automática para la primera raíz si no hay intervalo
+            dlg = IntervalsDialog(self, func, start=-10.0, end=10.0, step=0.5)
+            if dlg.exec() != QDialog.Accepted:
+                return
+            intervals = dlg.get_intervals()
+            if not intervals:
+                QMessageBox.warning(self, "Aviso", "No se detectaron intervalos donde la función cambie de signo.")
+                return
+            any_success = False
+            for a, b in intervals:
                 try:
                     pasos, raiz, fc, iteraciones = _run_bisection(func, a, b, tol)
-                    resultados.append((display_idx, expr, pasos, raiz, fc, iteraciones, approx_value))
+                    resultados.append((display_idx, expr1, pasos, raiz, fc, iteraciones, approx1_value))
                     display_idx += 1
+                    any_success = True
                 except Exception as exc:
-                    QMessageBox.warning(self, "Aviso", f"No se pudo calcular la raíz (intervalo [{a}, {b}]): {exc}")
-                    # continuar con las demás tarjetas
+                    QMessageBox.warning(self, "Aviso", f"Bisección en [{a}, {b}] falló: {exc}")
                     continue
+            if not any_success:
+                QMessageBox.warning(self, "Aviso", "No se encontraron raíces en los intervalos detectados.")
+                return
 
-            else:
-                # No se ingresó intervalo: detectar automáticamente
-                dlg = IntervalsDialog(self, func, start=-10.0, end=10.0, step=0.5)
-                if dlg.exec() != QDialog.Accepted:
-                    # El usuario canceló; abortar la operación completa
-                    return
-                intervals = dlg.get_intervals()
-                if not intervals:
-                    QMessageBox.warning(self, "Aviso", "No se detectaron intervalos donde la función cambie de signo.")
-                    return
-
-                any_success = False
-                for a, b in intervals:
-                    try:
-                        pasos, raiz, fc, iteraciones = _run_bisection(func, a, b, tol)
-                        resultados.append((display_idx, expr, pasos, raiz, fc, iteraciones, approx_value))
-                        display_idx += 1
-                        any_success = True
-                    except Exception as exc:
-                        # Mostrar pero continuar con otros intervalos
-                        QMessageBox.warning(self, "Aviso", f"Bisección en [{a}, {b}] falló: {exc}")
-                        continue
-
-                if not any_success:
-                    QMessageBox.warning(self, "Aviso", "No se encontraron raíces en los intervalos detectados.")
-                    return
+        # Procesar raíces adicionales: solo requieren intervalos, reutilizan expr1 y tol
+        for card_idx, card in enumerate(self.root_cards[1:], start=2):
+            _expr, a_txt, b_txt, _tol_txt, _approx_txt = card.values()
+            if not (a_txt and b_txt):
+                # Si no hay intervalo, omitir esta tarjeta pero no abortar el resto
+                QMessageBox.warning(self, "Aviso", f"La raíz #{card_idx} no tiene intervalo. Se omitirá.")
+                continue
+            try:
+                a = _parse_numeric(a_txt)
+                b = _parse_numeric(b_txt)
+            except Exception as exc:
+                QMessageBox.warning(self, "Aviso", f"Intervalo inválido en la raíz #{card_idx}: {exc}")
+                continue
+            try:
+                pasos, raiz, fc, iteraciones = _run_bisection(func, a, b, tol)
+                resultados.append((display_idx, expr1, pasos, raiz, fc, iteraciones, None))
+                display_idx += 1
+            except Exception as exc:
+                QMessageBox.warning(self, "Aviso", f"No se pudo calcular la raíz #{card_idx} (intervalo [{a}, {b}]): {exc}")
+                continue
 
         if not resultados:
-            QMessageBox.information(self, "Resultados", "No se encontraron raíces para las funciones ingresadas.")
+            QMessageBox.information(self, "Resultados", "No se encontraron raíces para los intervalos ingresados.")
             return
 
         self._render_resultados(resultados)
