@@ -24,8 +24,10 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QToolButton,
     QMenu,
+    QStyle,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QObject, QEvent
+from PySide6.QtGui import QFontMetrics
 
 from ..theme import (
     bind_font_scale_stylesheet,
@@ -52,6 +54,36 @@ _ALLOWED_NAMES.update(
         "e": math.e,
     }
 )
+
+
+class TableZoomFilter(QObject):
+    """Permite hacer zoom en tablas con Ctrl + rueda del ratón."""
+    def eventFilter(self, obj, event):
+        try:
+            if event.type() == QEvent.Wheel and hasattr(event, 'angleDelta'):
+                # En Qt6, QWheelEvent tiene modifiers()
+                modifiers = getattr(event, 'modifiers', lambda: Qt.NoModifier)()
+                if modifiers & Qt.ControlModifier:
+                    delta = event.angleDelta().y()
+                    font = obj.font()
+                    size = font.pointSize() or 10
+                    size += 1 if delta > 0 else -1
+                    size = max(8, min(28, size))
+                    font.setPointSize(size)
+                    obj.setFont(font)
+                    try:
+                        # Ajuste de altura de filas según la fuente
+                        fm = QFontMetrics(font)
+                        h = int(fm.height() * 1.6)
+                        obj.verticalHeader().setDefaultSectionSize(h)
+                        obj.horizontalHeader().setFont(font)
+                    except Exception:
+                        pass
+                    obj.viewport().update()
+                    return True
+        except Exception:
+            pass
+        return False
 
 
 def _format_number(value: float) -> str:
@@ -283,8 +315,12 @@ class MetodoBiseccionWindow(QMainWindow):
         self.setWindowTitle("Método de Bisección")
         self.root_cards: List[RootInputCard] = []
 
+        # Un solo scroll para toda la ventana
+        main_scroll = QScrollArea()
+        main_scroll.setWidgetResizable(True)
         central = QWidget()
-        self.setCentralWidget(central)
+        main_scroll.setWidget(central)
+        self.setCentralWidget(main_scroll)
         outer = QVBoxLayout(central)
         outer.setContentsMargins(24, 24, 24, 24)
         outer.setSpacing(18)
@@ -319,12 +355,12 @@ class MetodoBiseccionWindow(QMainWindow):
         self.btn_calcular = QPushButton("Calcular bisección")
         self.btn_calcular.setMinimumHeight(36)
         self.btn_calcular.clicked.connect(self._calcular)
-        nav_layout.addWidget(self.btn_calcular)
+        # Botón de calcular se reubica al final del formulario (ver más abajo)
 
         self.btn_limpiar = QPushButton("Limpiar formularios")
         self.btn_limpiar.setMinimumHeight(36)
         self.btn_limpiar.clicked.connect(self._limpiar)
-        nav_layout.addWidget(self.btn_limpiar)
+        # Botón de limpiar se reubica al final del formulario
 
         nav_layout.addStretch(1)
 
@@ -374,14 +410,18 @@ class MetodoBiseccionWindow(QMainWindow):
         subtitle_2.setWordWrap(True)
         card_layout.addWidget(subtitle_2)
 
-        forms_scroll = QScrollArea()
-        forms_scroll.setWidgetResizable(True)
         self.forms_container = QWidget()
         self.forms_layout = QVBoxLayout(self.forms_container)
         self.forms_layout.setContentsMargins(0, 0, 0, 0)
         self.forms_layout.setSpacing(14)
-        forms_scroll.setWidget(self.forms_container)
-        card_layout.addWidget(forms_scroll, 1)
+        card_layout.addWidget(self.forms_container, 1)
+        # Acciones al final del formulario
+        actions_row = QHBoxLayout()
+        actions_row.setSpacing(10)
+        actions_row.addStretch(1)
+        actions_row.addWidget(self.btn_limpiar)
+        actions_row.addWidget(self.btn_calcular)
+        card_layout.addLayout(actions_row)
 
         # Tarjeta para la gráfica interactiva (derecha)
         self.plot_card = QFrame()
@@ -415,14 +455,11 @@ class MetodoBiseccionWindow(QMainWindow):
         results_title.setObjectName("Title")
         outer.addWidget(results_title)
 
-        self.results_scroll = QScrollArea()
-        self.results_scroll.setWidgetResizable(True)
         self.results_widget = QWidget()
         self.results_layout = QVBoxLayout(self.results_widget)
         self.results_layout.setContentsMargins(0, 0, 0, 0)
         self.results_layout.setSpacing(16)
-        self.results_scroll.setWidget(self.results_widget)
-        outer.addWidget(self.results_scroll, 2)
+        outer.addWidget(self.results_widget, 2)
 
         self._sync_root_cards()
         self._show_empty_results()
@@ -454,6 +491,10 @@ class MetodoBiseccionWindow(QMainWindow):
             card.tol_edit.clear()
             card.approx_edit.clear()
         self._show_empty_results()
+        try:
+            self._update_plot_live()
+        except Exception:
+            pass
 
     def _sync_root_cards(self):
         target = self.root_count.value()
@@ -517,26 +558,6 @@ class MetodoBiseccionWindow(QMainWindow):
 
         self._render_resultados(resultados)
         self._draw_results_on_canvas(resultados)
-        # Preguntar si el usuario desea ver la gráfica
-        try:
-            answer = QMessageBox.question(
-                self,
-                "Mostrar gráfica",
-                "¿Desea ver la gráfica de la función y las raíces encontradas? (S/N):",
-                QMessageBox.Yes | QMessageBox.No,
-            )
-        except Exception:
-            answer = QMessageBox.No
-
-        if answer == QMessageBox.Yes:
-            try:
-                self._plot_resultados(resultados)
-            except Exception as exc:
-                QMessageBox.warning(
-                    self,
-                    "Error al graficar",
-                    f"Ocurrió un error al intentar graficar: {exc}",
-                )
 
     def _create_table_widget(self, pasos: List[BisectionStep]) -> QTableWidget:
         table = QTableWidget()
@@ -603,6 +624,34 @@ class MetodoBiseccionWindow(QMainWindow):
             title = QLabel(f"Raíz #{idx} - f(x) = {expr}")
             title.setObjectName("Subtitle")
             layout.addWidget(title)
+            # Reemplazo: fila de título con icono pequeño para expandir la tabla
+            title_row = QHBoxLayout()
+            title_row.setContentsMargins(0, 0, 0, 0)
+            title_row.setSpacing(8)
+            title_row.addWidget(title)
+            title_row.addStretch(1)
+            expand_btn = QToolButton()
+            expand_btn.setAutoRaise(True)
+            expand_btn.setCursor(Qt.PointingHandCursor)
+            expand_btn.setToolTip("Abrir tabla en ventana amplia")
+            try:
+                icon = self.style().standardIcon(QStyle.SP_TitleBarMaxButton)
+                expand_btn.setIcon(icon)
+            except Exception:
+                expand_btn.setText("↗")
+            expand_btn.clicked.connect(
+                lambda _checked=False, t=lambda: title.text(), ps=pasos: self._open_table_dialog(t(), ps)
+            )
+            # quitar el título agregado y reemplazar por la fila con icono
+            try:
+                item = layout.takeAt(layout.count() - 1)
+                if item is not None:
+                    w = item.widget()
+                    if w is not None:
+                        w.setParent(None)
+            except Exception:
+                pass
+            layout.addLayout(title_row)
 
             raiz_txt = _format_number(raiz)
             error_txt = _format_number(abs(fc))
@@ -640,13 +689,7 @@ class MetodoBiseccionWindow(QMainWindow):
             table = self._create_table_widget(pasos)
             layout.addWidget(table)
 
-            btn_expand = QPushButton("Ver tabla en ventana amplia")
-            btn_expand.setMinimumHeight(32)
-            btn_expand.setCursor(Qt.PointingHandCursor)
-            btn_expand.clicked.connect(
-                lambda _checked=False, t=title.text(), ps=pasos: self._open_table_dialog(t, ps)
-            )
-            layout.addWidget(btn_expand, 0, Qt.AlignRight)
+            # Botón reemplazado por icono en la fila del título
 
             self.results_layout.addWidget(card)
 
@@ -654,7 +697,6 @@ class MetodoBiseccionWindow(QMainWindow):
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.MinimumExpanding)
         self.results_layout.addWidget(spacer)
 
-        self.results_scroll.verticalScrollBar().setValue(0)
 
     def _show_empty_results(self):
         for i in reversed(range(self.results_layout.count())):
@@ -818,6 +860,11 @@ class MetodoBiseccionWindow(QMainWindow):
         self._mpl['ax'].set_ylabel("Eje Y")
         self.plot_container_layout.addWidget(self._mpl['toolbar'])
         self.plot_container_layout.addWidget(self._mpl['canvas'], 1)
+        try:
+            # Zoom con rueda del ratón sobre la gráfica
+            self._mpl['cid_scroll'] = self._mpl['canvas'].mpl_connect('scroll_event', self._on_canvas_scroll)
+        except Exception:
+            pass
 
     def _current_x_range(self):
         xs = []
@@ -956,3 +1003,34 @@ class MetodoBiseccionWindow(QMainWindow):
         ax.legend()
         ax.set_title("Resultados de bisección")
         self._mpl['canvas'].draw_idle()
+
+    def _on_canvas_scroll(self, event):
+        # Zoom con rueda del ratón en matplotlib (centra en el cursor)
+        try:
+            if not getattr(self, '_mpl_ready', False):
+                return
+            ax = self._mpl['ax']
+            # Ignorar si no hay datos de eje (p. ej. fuera del gráfico)
+            if event.xdata is None or event.ydata is None:
+                return
+            # Determinar factor de zoom
+            base = 1.2
+            scale = 1.0 / base if getattr(event, 'button', 'up') == 'up' else base
+            cur_xlim = ax.get_xlim()
+            cur_ylim = ax.get_ylim()
+            xdata = float(event.xdata)
+            ydata = float(event.ydata)
+            # Reescalar manteniendo el punto del cursor como ancla
+            left = xdata - (xdata - cur_xlim[0]) * scale
+            right = xdata + (cur_xlim[1] - xdata) * scale
+            bottom = ydata - (ydata - cur_ylim[0]) * scale
+            top = ydata + (cur_ylim[1] - ydata) * scale
+            # Evitar colapsar a rangos inválidos
+            if right - left < 1e-9 or top - bottom < 1e-9:
+                return
+            ax.set_xlim(left, right)
+            ax.set_ylim(bottom, top)
+            self._mpl['canvas'].draw_idle()
+        except Exception:
+            pass
+
