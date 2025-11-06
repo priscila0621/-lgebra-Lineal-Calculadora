@@ -139,12 +139,104 @@ def _parse_numeric(text: str) -> float:
         raise ValueError(f"El valor '{cleaned}' no es numérico.") from exc
 
 
+def _normalize_expression(expr: str) -> str:
+    expr = expr.replace("==", "=")
+    expr = expr.replace("^", "**")
+    expr = expr.replace("{", "(").replace("}", ")")
+    expr = expr.replace("[", "(").replace("]", ")")
+    return _insert_implicit_multiplication(expr)
+
+
+def _insert_implicit_multiplication(expr: str) -> str:
+    result_chars = []
+    prev_non_space_idx = None
+
+    for idx, ch in enumerate(expr):
+        if prev_non_space_idx is not None and _needs_implicit_mul(expr, prev_non_space_idx, idx):
+            result_chars.append("*")
+        result_chars.append(ch)
+        if not ch.isspace():
+            prev_non_space_idx = idx
+    return "".join(result_chars)
+
+
+def _needs_implicit_mul(expr: str, prev_idx: int, curr_idx: int) -> bool:
+    prev_char = expr[prev_idx]
+    curr_char = expr[curr_idx]
+
+    if curr_char.isspace():
+        return False
+    if prev_char in "+-*/%^=,":
+        return False
+    if curr_char in "+-*/%^=,)":
+        return False
+    if curr_char == ")":
+        return False
+    if prev_char == "(":
+        return False
+
+    prev_lower = prev_char.lower()
+    curr_lower = curr_char.lower()
+
+    if curr_lower == "x":
+        return (
+            prev_char.isdigit()
+            or prev_char == "."
+            or prev_char == ")"
+            or prev_lower == "x"
+        )
+
+    if curr_char == "(":
+        return (
+            prev_char.isdigit()
+            or prev_char == "."
+            or prev_char == ")"
+            or prev_lower == "x"
+        )
+
+    if curr_char.isdigit():
+        return prev_lower == "x" or prev_char == ")"
+
+    if curr_char.isalpha():
+        if prev_char.isdigit() or prev_char == "." or prev_char == ")":
+            if curr_lower in ("e",):
+                return not _looks_like_scientific(expr, curr_idx)
+            return True
+        return False
+
+    return False
+
+
+def _looks_like_scientific(expr: str, e_idx: int) -> bool:
+    next_idx = e_idx + 1
+    length = len(expr)
+    while next_idx < length and expr[next_idx].isspace():
+        next_idx += 1
+    if next_idx >= length:
+        return False
+    next_char = expr[next_idx]
+    if next_char in "+-":
+        next_idx += 1
+        if next_idx >= length:
+            return False
+        next_char = expr[next_idx]
+    if not next_char.isdigit():
+        return False
+    prev_idx = e_idx - 1
+    while prev_idx >= 0 and expr[prev_idx].isspace():
+        prev_idx -= 1
+    if prev_idx < 0:
+        return False
+    prev_char = expr[prev_idx]
+    if not (prev_char.isdigit() or prev_char == "."):
+        return False
+    return True
+
 def _compile_function(expr: str) -> Callable[[float], float]:
     cleaned = (expr or "").strip()
     if not cleaned:
         raise ValueError("Ingrese una función f(x).")
-    cleaned = cleaned.replace("==", "=")
-    cleaned = cleaned.replace("^", "**").replace("{", "(").replace("}", ")")
+    cleaned = _normalize_expression(cleaned)
     if "=" in cleaned:
         parts = cleaned.split("=")
         if len(parts) != 2:
