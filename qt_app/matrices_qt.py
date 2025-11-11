@@ -1008,7 +1008,7 @@ class InversaMatrizWindow(_BaseMatrixWindow):
                         x[pc] = -R[r][j0]
                 lines.append("")
                 lines.append("- (d) Existe solución no trivial para Ax = 0. Ejemplo:")
-                lines.append("x = [ " + ", ".join(str(v) for v in x) + " ]^t")
+                lines.append("x = [ " + ", ".join(str(v) for v in x) + " ]ᵗ")
                 lines.append("")
                 lines.append("- (e) Por consiguiente, las columnas de A son linealmente dependientes (no LI).")
             else:
@@ -1105,12 +1105,12 @@ class InversaMatrizWindow(_BaseMatrixWindow):
             box_final_left.layout().addWidget(QLabel("Matriz Identidad(I):"))
             box_final_left.layout().addWidget(_matrix_widget(self, Aw))
             box_final_right = QFrame(); box_final_right.setLayout(QVBoxLayout())
-            box_final_right.layout().addWidget(QLabel("Matriz Inversa (A^{-1}):"))
+            box_final_right.layout().addWidget(QLabel("Matriz Inversa (A⁻¹):"))
             box_final_right.layout().addWidget(_matrix_widget(self, Iw))
             self.visual_frame.layout().addWidget(box_final_left)
             self.visual_frame.layout().addWidget(box_final_right)
             # También añadir una sección textual final en el recuadro de pasos
-            self.result_box.insertPlainText("\nMatriz aumentada final [I | A^-1]:\n")
+            self.result_box.insertPlainText("\nMatriz aumentada final [I | A⁻¹]:\n")
             for ln in augmented_lines(Aw, Iw):
                 self.result_box.insertPlainText(ln + "\n")
 
@@ -1192,7 +1192,7 @@ class InversaMatrizWindow(_BaseMatrixWindow):
                     self.result_box.insertPlainText("El determinante de la matriz es 0.\n\n")
                     self.result_box.insertPlainText("Esto significa que la matriz no es invertible,\n")
                     self.result_box.insertPlainText("ya que su determinante es igual a cero.\n\n")
-                    self.result_box.insertPlainText("Por lo tanto, no existe la matriz inversa A^-1.\n\n")
+                    self.result_box.insertPlainText("Por lo tanto, no existe la matriz inversa A⁻¹.\n\n")
                     # además mostrar la explicación c/d/e en el recuadro para aportar evidencia adicional
                     for l in explain_cde(Aw):
                         self.result_box.insertPlainText(l + "\n")
@@ -1220,7 +1220,7 @@ class InversaMatrizWindow(_BaseMatrixWindow):
 
                 # preparar contenedor para la inversa
                 boxInv = QFrame(); boxInv.setLayout(QVBoxLayout())
-                boxInv.layout().addWidget(QLabel("A^{-1} (inversa):"))
+                boxInv.layout().addWidget(QLabel("A⁻¹ (inversa):"))
 
                 self.visual_frame.layout().addWidget(boxA)
                 self.visual_frame.layout().addWidget(boxAdj)
@@ -1271,7 +1271,7 @@ class InversaMatrizWindow(_BaseMatrixWindow):
 
                 # 3) Matriz Adjunta
                 self.result_box.insertPlainText("3) Matriz Adjunta\n")
-                self.result_box.insertPlainText("Adj(A) = (Cof(A))^T  (traspuesta de la matriz de cofactores)\n\n")
+                self.result_box.insertPlainText("Adj(A) = (Cof(A))ᵀ  (traspuesta de la matriz de cofactores)\n\n")
                 for ln in (" ".join(str(v) for v in row) for row in adj):
                     self.result_box.insertPlainText(ln + "\n")
                 self.result_box.insertPlainText("\n")
@@ -1282,9 +1282,9 @@ class InversaMatrizWindow(_BaseMatrixWindow):
                 boxInv.layout().addWidget(_matrix_widget(self, inv))
                 self.visual_frame.layout().addWidget(boxInv)
                 self.result_box.insertPlainText("4) Cálculo de la inversa\n")
-                self.result_box.insertPlainText(f"Como |A| = {total},\nA^-1 = (1 / |A|) · Adj(A)\n")
-                self.result_box.insertPlainText(f"A^-1 = (1 / {total}) · Adj(A)\n\n")
-                self.result_box.insertPlainText("A^-1 =\n")
+                self.result_box.insertPlainText(f"Como |A| = {total},\nA⁻¹ = (1 / |A|) · Adj(A)\n")
+                self.result_box.insertPlainText(f"A⁻¹ = (1 / {total}) · Adj(A)\n\n")
+                self.result_box.insertPlainText("A⁻¹ =\n")
                 for ln in (" ".join(str(v) for v in row) for row in inv):
                     self.result_box.insertPlainText(ln + "\n")
 

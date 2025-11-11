@@ -1,4 +1,5 @@
 from math import isfinite
+import re
 import math
 from dataclasses import dataclass
 from typing import Callable, List, Tuple
@@ -38,6 +39,7 @@ from ..theme import (
     gear_icon_preferred,
 )
 from ..settings_qt import open_settings_dialog
+from ..text_utils import superscriptify
 
 # Import plotting libraries when needed. We'll import lazily inside the plotting method
 
@@ -103,6 +105,111 @@ class TableZoomFilter(QObject):
         return False
 
 
+class ExponentInputFilter(QObject):
+    """Convierte entrada de potencias a superíndices en un QLineEdit.
+
+    Reglas:
+    - Al teclear '^' inserta '⁽⁾' y coloca el cursor dentro; activa modo exponente.
+    - Mientras esté activo el modo exponente, convierte 0-9, '+', '-', '(', ')', 'n'
+      a sus equivalentes en superíndice.
+    - Cualquier otra tecla sale del modo exponente y se procesa normalmente.
+    """
+
+    SUPERS = {
+        "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴",
+        "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
+        "+": "⁺", "-": "⁻", "(": "⁽", ")": "⁾", "n": "ⁿ",
+    }
+
+    def __init__(self, edit: QLineEdit):
+        super().__init__(edit)
+        self.edit = edit
+        self.in_exp_mode = False
+        self._prev_star = False
+
+    def eventFilter(self, obj, event):
+        try:
+            if obj is not self.edit:
+                return False
+            if event.type() != QEvent.KeyPress:
+                return False
+            text = event.text() or ""
+
+            # Permitir saltar al superíndice con flecha derecha cuando hay plantilla ⁽⁾
+            try:
+                key = getattr(event, 'key', lambda: None)()
+                if key == Qt.Key_Right:
+                    s = self.edit.text() or ""
+                    pos = self.edit.cursorPosition()
+                    if pos < len(s) and s[pos:pos+2] == "⁽⁾":
+                        # Colocar el cursor dentro del superíndice y activar modo exponente
+                        self.edit.setCursorPosition(pos + 1)
+                        self.in_exp_mode = True
+                        return True
+            except Exception:
+                pass
+
+            # Activar modo exponente con '^'
+            if text == "^":
+                self._insert("⁽⁾")
+                # Colocar cursor entre paréntesis superíndice
+                try:
+                    pos = self.edit.cursorPosition()
+                    self.edit.setCursorPosition(max(0, pos - 1))
+                except Exception:
+                    pass
+                self.in_exp_mode = True
+                self._prev_star = False
+                return True
+
+            # Detectar '**' y convertir a superíndice en vivo
+            if text == "*":
+                if self._prev_star:
+                    try:
+                        pos = self.edit.cursorPosition()
+                        s = self.edit.text() or ""
+                        if pos > 0 and s[pos-1] == '*':
+                            new_s = s[:pos-1] + "⁽⁾" + s[pos:]
+                            self.edit.setText(new_s)
+                            # Cursor dentro del super-paréntesis
+                            self.edit.setCursorPosition(pos)
+                            self.in_exp_mode = True
+                            self._prev_star = False
+                            return True
+                    except Exception:
+                        pass
+                # Primer '*': permitirlo y marcar
+                self._prev_star = True
+                return False
+
+            if self.in_exp_mode:
+                if text in self.SUPERS:
+                    self._insert(self.SUPERS[text])
+                    # Si el usuario cierra con ')', mantener modo por si sigue escribiendo
+                    return True
+                # Salir de modo exponente ante teclas no soportadas
+                self.in_exp_mode = False
+                self._prev_star = (text == '*')
+                return False
+            else:
+                # Si no estamos en modo exponente, y no se tecleó '*', limpiar estado
+                if text != '*':
+                    self._prev_star = False
+            return False
+        except Exception:
+            return False
+
+    def _insert(self, s: str):
+        try:
+            pos = self.edit.cursorPosition()
+            current = self.edit.text() or ""
+            new_text = current[:pos] + s + current[pos:]
+            self.edit.setText(new_text)
+            self.edit.setCursorPosition(pos + len(s))
+        except Exception:
+            pass
+
+
 def _format_number(value: float) -> str:
     try:
         if not isfinite(value):
@@ -140,11 +247,55 @@ def _parse_numeric(text: str) -> float:
 
 
 def _normalize_expression(expr: str) -> str:
+    expr = _pretty_to_ascii(expr)
     expr = expr.replace("==", "=")
     expr = expr.replace("^", "**")
     expr = expr.replace("{", "(").replace("}", ")")
     expr = expr.replace("[", "(").replace("]", ")")
     return _insert_implicit_multiplication(expr)
+
+
+def _pretty_to_ascii(expr: str) -> str:
+    """Convierte símbolos algebraicos visibles (√, superíndices) a una forma evaluable.
+
+    - √x o √(x+1)  -> sqrt(x) / sqrt(x+1)
+    - x², x⁻³, (x+1)⁴ -> x^(2), x^(-3), (x+1)^(4)
+    """
+    if not expr:
+        return expr
+
+    s = expr
+
+    # 1) Raíz cuadrada: √( … )  -> sqrt( … )
+    s = s.replace("√(", "sqrt(")
+
+    # 1b) Raíz aplicada a un identificador/numero simple: √x, √2.5 -> sqrt(x), sqrt(2.5)
+    s = re.sub(r"√\s*([A-Za-z]|\d(?:[\d\.]*))", r"sqrt(\1)", s)
+
+    # 2) Potencias con superíndices: secuencia de superíndices tras un término
+    supers_map = str.maketrans({
+        "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4",
+        "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9",
+        "⁺": "+", "⁻": "-", "⁽": "(", "⁾": ")", "ⁿ": "n",
+    })
+
+    def _sup_repl(m: re.Match) -> str:
+        base = m.group(1)
+        sup = m.group(2)
+        norm = sup.translate(supers_map)
+        norm = norm.strip()
+        if len(norm) <= 1 and norm not in ("(", ")"):
+            return f"{base}^{norm}"
+        return f"{base}^({norm})"
+
+    # Aplica repetidamente por si hay múltiples ocurrencias
+    pattern = re.compile(r"([A-Za-z0-9\)]+)([⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁽⁾ⁿ]+)")
+    prev = None
+    while prev != s:
+        prev = s
+        s = pattern.sub(_sup_repl, s)
+
+    return s
 
 
 def _insert_implicit_multiplication(expr: str) -> str:
@@ -477,11 +628,88 @@ class RootInputCard(QFrame):
 
         self.lbl_func = QLabel("f(x):")
         self.lbl_func.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        grid.addWidget(self.lbl_func, 0, 0)
+        # La etiqueta se mantiene a la izquierda del campo de texto en la fila siguiente
         self.function_edit = QLineEdit()
-        self.function_edit.setPlaceholderText("Ejemplo: x**3 - x - 2")
+        self.function_edit.setPlaceholderText("Ejemplo: x³ - x - 2")
         self.function_edit.setClearButtonEnabled(True)
-        grid.addWidget(self.function_edit, 0, 1, 1, 2)
+        # Activar entrada de superíndices para potencias
+        try:
+            self._exp_filter = ExponentInputFilter(self.function_edit)
+            self.function_edit.installEventFilter(self._exp_filter)
+            # Si el botón de potencia del toolbar inserta '^', lo convertimos automáticamente
+            self._in_text_update = False
+            def _on_text_changed(_):
+                if getattr(self, "_in_text_update", False):
+                    return
+                text = self.function_edit.text() or ""
+                pos = self.function_edit.cursorPosition()
+
+                SUPERS = {
+                    "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴",
+                    "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
+                    "+": "⁺", "-": "⁻", "(": "⁽", ")": "⁾", "n": "ⁿ",
+                }
+                allowed = set("0123456789+-()n")
+
+                i = 0
+                new = []
+                new_pos = pos
+                changed = False
+                length = len(text)
+                while i < length:
+                    ch = text[i]
+                    # Tratar '**' como '^' para auto-superíndice
+                    if ch == '*' and i + 1 < length and text[i+1] == '*':
+                        ch = '^'
+                        i += 1  # saltar el segundo '*'
+                    if ch == '^':
+                        j = i + 1
+                        # recolectar contenido del exponente si existe
+                        while j < length and text[j] in allowed:
+                            j += 1
+                        content = text[i+1:j]
+                        # si no hay contenido aún, insertar paréntesis vacíos
+                        if content:
+                            sup = ''.join(SUPERS.get(c, c) for c in content)
+                        else:
+                            sup = ''
+                        repl = '⁽' + sup + '⁾'
+                        new.append(repl)
+                        # ajustar caret
+                        old_len = j - i
+                        delta = len(repl) - old_len
+                        if pos < i:
+                            pass
+                        elif pos <= j:
+                            # cursor estaba dentro del exponente original
+                            offset = pos - (i + 1)
+                            new_pos = (len(''.join(new)) - len(repl)) + 1 + max(0, offset)
+                            new_pos = min(new_pos, (len(''.join(new)) - 1))
+                        else:
+                            new_pos = pos + delta
+                        i = j
+                        changed = True
+                        continue
+                    new.append(ch)
+                    i += 1
+
+                if changed:
+                    try:
+                        self._in_text_update = True
+                        new_text = ''.join(new)
+                        self.function_edit.setText(new_text)
+                        self.function_edit.setCursorPosition(max(0, min(len(new_text), new_pos)))
+                        try:
+                            # Asegurar que seguimos en modo exponente para convertir dígitos a superíndice
+                            if hasattr(self, "_exp_filter"):
+                                self._exp_filter.in_exp_mode = True
+                        except Exception:
+                            pass
+                    finally:
+                        self._in_text_update = False
+            self.function_edit.textChanged.connect(_on_text_changed)
+        except Exception:
+            pass
 
         # Barra de atajos para funciones (para facilitar ingreso de f(x))
         self.func_toolbar = QWidget()
@@ -505,7 +733,8 @@ class RootInputCard(QFrame):
         # Botones comúnes y funciones necesarias
         add_btn("x", "x", tooltip="Insertar variable x")
         add_btn("x²", "x**2", tooltip="Insertar x al cuadrado")
-        add_btn("^", "**", tooltip="Potencia: usa ** como exponente")
+        # Plantilla de potencia: inserta x⁽⁾ y deja el cursor listo para escribir la base (después de x)
+        add_btn("xⁿ", "x⁽⁾", cursor_offset=-2, tooltip="Potencia: x elevado a n (plantilla)")
         add_btn("()", "()", cursor_offset=-1, tooltip="Paréntesis")
         add_btn("√", "sqrt()", cursor_offset=-1, tooltip="Raíz: sqrt()")
         add_btn("sen", "sen()", cursor_offset=-1, tooltip="Seno")
@@ -518,11 +747,42 @@ class RootInputCard(QFrame):
         add_btn("π", "pi", tooltip="Constante pi")
         add_btn("e", "e", tooltip="Constante e")
 
-        grid.addWidget(self.func_toolbar, 0, 3)
+        # Ubicar la barra de atajos arriba del campo de la función, ocupando columnas 1..3
+        grid.addWidget(self.func_toolbar, 0, 1, 1, 3)
+
+        # Ajuste visual: mostrar símbolos algebraicos en la barra de atajos
+        try:
+            while ft_layout.count():
+                item = ft_layout.takeAt(0)
+                w = item.widget()
+                if w is not None:
+                    w.deleteLater()
+
+            add_btn("x", "x", tooltip="Insertar variable x")
+            add_btn("x²", "x²", tooltip="Insertar x al cuadrado")
+            # Misma plantilla visible con superíndice
+            add_btn("xⁿ", "x⁽⁾", cursor_offset=-2, tooltip="Potencia: plantilla xⁿ")
+            add_btn("()", "()", cursor_offset=-1, tooltip="Paréntesis")
+            add_btn("√", "√()", cursor_offset=-1, tooltip="Raíz cuadrada: √( )")
+            add_btn("sen", "sen()", cursor_offset=-1, tooltip="Seno")
+            add_btn("cos", "cos()", cursor_offset=-1, tooltip="Coseno")
+            add_btn("tan", "tan()", cursor_offset=-1, tooltip="Tangente")
+            add_btn("ln", "ln()", cursor_offset=-1, tooltip="Logaritmo natural")
+            add_btn("log", "log()", cursor_offset=-1, tooltip="Logaritmo base e (math.log)")
+            add_btn("exp", "exp()", cursor_offset=-1, tooltip="Exponencial e^x")
+            add_btn("abs", "abs()", cursor_offset=-1, tooltip="Valor absoluto")
+            add_btn("π", "pi", tooltip="Constante pi")
+            add_btn("e", "e", tooltip="Constante e")
+        except Exception:
+            pass
+
+        # Ahora ubicar etiqueta y campo de función en la fila 1, con el campo más largo (columnas 1..3)
+        grid.addWidget(self.lbl_func, 1, 0)
+        grid.addWidget(self.function_edit, 1, 1, 1, 3)
 
         self.lbl_intervalo = QLabel("Intervalo [a, b]:")
         self.lbl_intervalo.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        grid.addWidget(self.lbl_intervalo, 1, 0)
+        grid.addWidget(self.lbl_intervalo, 2, 0)
 
         interval_widget = QWidget()
         interval_layout = QHBoxLayout(interval_widget)
@@ -552,26 +812,26 @@ class RootInputCard(QFrame):
         interval_layout.addStretch(1)
 
         self.interval_widget = interval_widget
-        grid.addWidget(self.interval_widget, 1, 1, 1, 3)
+        grid.addWidget(self.interval_widget, 2, 1, 1, 3)
 
         self.lbl_tol = QLabel("Tolerancia:")
         self.lbl_tol.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        grid.addWidget(self.lbl_tol, 2, 0)
+        grid.addWidget(self.lbl_tol, 3, 0)
         self.tol_edit = QLineEdit()
         self.tol_edit.setPlaceholderText("Ejemplo: 0.0001")
         self.tol_edit.setAlignment(Qt.AlignCenter)
         self.tol_edit.setClearButtonEnabled(True)
-        grid.addWidget(self.tol_edit, 2, 1, 1, 3)
+        grid.addWidget(self.tol_edit, 3, 1, 1, 3)
 
         self.lbl_aprox = QLabel("Valor aproximado (opcional):")
         self.lbl_aprox.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        grid.addWidget(self.lbl_aprox, 3, 0)
+        grid.addWidget(self.lbl_aprox, 4, 0)
         self.approx_edit = QLineEdit()
         self.approx_edit.setPlaceholderText("Ejemplo: 1.2")
         self.approx_edit.setAlignment(Qt.AlignCenter)
         self.approx_edit.setClearButtonEnabled(True)
         self.approx_edit.setToolTip("Ingresa un valor esperado para comparar, deja vacío si no aplica.")
-        grid.addWidget(self.approx_edit, 3, 1, 1, 3)
+        grid.addWidget(self.approx_edit, 4, 1, 1, 3)
         grid.setColumnStretch(1, 1)
         grid.setColumnStretch(2, 1)
         grid.setColumnStretch(3, 1)
@@ -1016,7 +1276,8 @@ class MetodoBiseccionWindow(QMainWindow):
             layout.setContentsMargins(28, 24, 28, 24)
             layout.setSpacing(18)
 
-            title = QLabel(f"Raíz #{idx} - f(x) = {expr}")
+            # Mostrar la función con potencias en superíndice para mejor lectura
+            title = QLabel(f"Raíz #{idx} - f(x) = {superscriptify(expr)}")
             title.setObjectName("Subtitle")
             layout.addWidget(title)
             # Reemplazo: fila de título con icono pequeño para expandir la tabla
