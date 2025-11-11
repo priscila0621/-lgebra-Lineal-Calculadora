@@ -1,0 +1,201 @@
+    def _calcular(self):
+        resultados = []
+        display_idx = 1
+
+        if not self.root_cards:
+            QMessageBox.warning(self, "Aviso", "No hay formularios disponibles.")
+            return
+
+        # Tomar función y tolerancia de la primera raíz
+        first_card = self.root_cards[0]
+        expr1, a1_txt, b1_txt, tol1_txt, approx1_txt = first_card.values()
+        expr1 = (expr1 or "").strip()
+        if not expr1:
+            QMessageBox.warning(self, "Aviso", "Ingresa la función f(x) en la primera raíz.")
+            return
+        try:
+            func = _compile_function(expr1)
+        except Exception as exc:
+            QMessageBox.warning(self, "Aviso", f"La función en la primera raíz no es válida: {exc}")
+            return
+
+        try:
+            tol = _parse_numeric(tol1_txt)
+            if tol <= 0:
+                raise ValueError("La tolerancia debe ser positiva.")
+        except Exception as exc:
+            QMessageBox.warning(self, "Aviso", f"Tolerancia inválida (primera raíz): {exc}")
+            return
+
+        approx1_value = None
+        if approx1_txt:
+            try:
+                approx1_value = _parse_numeric(approx1_txt)
+            except Exception:
+                approx1_value = None
+
+        # Procesar primera raíz (permite detección automática si no hay [a,b])
+        if a1_txt and b1_txt:
+            try:
+                a1 = _parse_numeric(a1_txt)
+                b1 = _parse_numeric(b1_txt)
+            except Exception as exc:
+                QMessageBox.warning(self, "Aviso", f"Intervalo inválido (primera raíz): {exc}")
+                return
+            try:
+                pasos, raiz, fc, iteraciones = _run_bisection(func, a1, b1, tol)
+                resultados.append((display_idx, expr1, pasos, raiz, fc, iteraciones, approx1_value))
+                display_idx += 1
+            except Exception as exc:
+                QMessageBox.warning(self, "Aviso", f"No se pudo calcular la raíz (intervalo [{a1}, {b1}]): {exc}")
+        else:
+            # Detección automática para la primera raíz si no hay intervalo
+            dlg = IntervalsDialog(self, func, start=-10.0, end=10.0, step=0.5)
+            if dlg.exec() != QDialog.Accepted:
+                return
+            intervals = dlg.get_intervals()
+            if not intervals:
+                QMessageBox.warning(self, "Aviso", "No se detectaron intervalos donde la función cambie de signo.")
+                return
+            any_success = False
+            for a, b in intervals:
+                try:
+                    pasos, raiz, fc, iteraciones = _run_bisection(func, a, b, tol)
+                    resultados.append((display_idx, expr1, pasos, raiz, fc, iteraciones, approx1_value))
+                    display_idx += 1
+                    any_success = True
+                except Exception as exc:
+                    QMessageBox.warning(self, "Aviso", f"Bisección en [{a}, {b}] falló: {exc}")
+                    continue
+            if not any_success:
+                QMessageBox.warning(self, "Aviso", "No se encontraron raíces en los intervalos detectados.")
+                return
+
+        # Procesar raíces adicionales: solo requieren intervalos, reutilizan expr1 y tol
+        for card_idx, card in enumerate(self.root_cards[1:], start=2):
+            _expr, a_txt, b_txt, _tol_txt, _approx_txt = card.values()
+            if not (a_txt and b_txt):
+                # Si no hay intervalo, omitir esta tarjeta pero no abortar el resto
+                QMessageBox.warning(self, "Aviso", f"La raíz #{card_idx} no tiene intervalo. Se omitirá.")
+                continue
+            try:
+                a = _parse_numeric(a_txt)
+                b = _parse_numeric(b_txt)
+            except Exception as exc:
+                QMessageBox.warning(self, "Aviso", f"Intervalo inválido en la raíz #{card_idx}: {exc}")
+                continue
+            try:
+                pasos, raiz, fc, iteraciones = _run_bisection(func, a, b, tol)
+                resultados.append((display_idx, expr1, pasos, raiz, fc, iteraciones, None))
+                display_idx += 1
+            except Exception as exc:
+                QMessageBox.warning(self, "Aviso", f"No se pudo calcular la raíz #{card_idx} (intervalo [{a}, {b}]): {exc}")
+                continue
+
+        if not resultados:
+            QMessageBox.information(self, "Resultados", "No se encontraron raíces para los intervalos ingresados.")
+            return
+
+        self._render_resultados(resultados)
+        self._draw_results_on_canvas(resultados)
+
+    def _create_table_widget(self, pasos: List[BisectionStep]) -> QTableWidget:
+        table = QTableWidget()
+        table.setColumnCount(7)
+        table.setHorizontalHeaderLabels(
+            ["Iteración", "a", "b", "c", "f(a)", "f(b)", "f(c)"]
+        )
+        table.setRowCount(len(pasos))
+        table.setEditTriggers(QTableWidget.NoEditTriggers)
+        table.setSelectionMode(QTableWidget.NoSelection)
+        table.verticalHeader().setVisible(False)
+        table.setAlternatingRowColors(True)
+        table.setObjectName("ResultsTable")
+        table.setMinimumHeight(320)
+        table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        for row, paso in enumerate(pasos):
+            values = [
+                str(paso.iteration),
+                _format_number(paso.a),
+                _format_number(paso.b),
+                _format_number(paso.c),
+                _format_number(paso.fa),
+                _format_number(paso.fb),
+                _format_number(paso.fc),
+            ]
+            for col, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setTextAlignment(Qt.AlignCenter)
+                table.setItem(row, col, item)
+
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Stretch)
+        return table
+
+    def _open_table_dialog(self, title: str, pasos: List[BisectionStep]) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.resize(960, 600)
+        dialog_layout = QVBoxLayout(dialog)
+        dialog_table = self._create_table_widget(pasos)
+        dialog_table.setMinimumHeight(0)
+        dialog_layout.addWidget(dialog_table, 1)
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(dialog.reject)
+        buttons.accepted.connect(dialog.accept)
+        dialog_layout.addWidget(buttons)
+        dialog.exec()
+
+    def _render_resultados(self, resultados):
+        for i in reversed(range(self.results_layout.count())):
+            item = self.results_layout.itemAt(i)
+            widget = item.widget()
+            if widget:
+                widget.setParent(None)
+
+        for idx, expr, pasos, raiz, fc, iteraciones, approx_value in resultados:
+            card = QFrame()
+            card.setObjectName("Card")
+            layout = QVBoxLayout(card)
+            layout.setContentsMargins(28, 24, 28, 24)
+            layout.setSpacing(18)
+
+            # Mostrar la función con potencias en superíndice para mejor lectura
+            title = QLabel(f"Raíz #{idx} - f(x) = {superscriptify(expr)}")
+            title.setObjectName("Subtitle")
+            layout.addWidget(title)
+            # Reemplazo: fila de título con icono pequeño para expandir la tabla
+            title_row = QHBoxLayout()
+            title_row.setContentsMargins(0, 0, 0, 0)
+            title_row.setSpacing(8)
+            title_row.addWidget(title)
+            title_row.addStretch(1)
+            expand_btn = QToolButton()
+            expand_btn.setAutoRaise(True)
+            expand_btn.setCursor(Qt.PointingHandCursor)
+            expand_btn.setToolTip("Abrir tabla en ventana amplia")
+            try:
+                icon = self.style().standardIcon(QStyle.SP_TitleBarMaxButton)
+                expand_btn.setIcon(icon)
+            except Exception:
+                expand_btn.setText("↗")
+            expand_btn.clicked.connect(
+                lambda _checked=False, t=lambda: title.text(), ps=pasos: self._open_table_dialog(t(), ps)
+            )
+            # quitar el título agregado y reemplazar por la fila con icono
+            try:
+                item = layout.takeAt(layout.count() - 1)
+                if item is not None:
+                    w = item.widget()
+                    if w is not None:
+                        w.setParent(None)
+            except Exception:
+                pass
+            layout.addLayout(title_row)
+
+            raiz_txt = _format_number(raiz)
+            error_txt = _format_number(abs(fc))
+            summary_lines = [
+                f"El método converge con {iteraciones} iteraciones.",
+                f"La raíz es: {raiz_txt}.",

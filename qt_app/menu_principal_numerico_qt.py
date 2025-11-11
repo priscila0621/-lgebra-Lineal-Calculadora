@@ -22,6 +22,7 @@ from .theme import (
 )
 from .settings_qt import open_settings_dialog
 from .metodos.biseccion_qt import MetodoBiseccionWindow
+from .metodos.falsa_posicion_qt import MetodoFalsaPosicionWindow
 
 
 class MenuNumericoPrincipalWindow(QMainWindow):
@@ -101,11 +102,16 @@ class MenuNumericoPrincipalWindow(QMainWindow):
         nav_sub.setWordWrap(True)
         nav_lay.addWidget(nav_sub)
 
-        # Único módulo disponible por ahora
+        # Módulos disponibles
         self.btn_biseccion = QPushButton("Método de bisección")
         self.btn_biseccion.setMinimumHeight(44)
         self.btn_biseccion.clicked.connect(self._open_biseccion)
         nav_lay.addWidget(self.btn_biseccion)
+
+        self.btn_falsa_pos = QPushButton("Método de falsa posición")
+        self.btn_falsa_pos.setMinimumHeight(44)
+        self.btn_falsa_pos.clicked.connect(self._open_falsa_posicion)
+        nav_lay.addWidget(self.btn_falsa_pos)
 
         nav_lay.addStretch(1)
 
@@ -201,6 +207,11 @@ class MenuNumericoPrincipalWindow(QMainWindow):
 
     def _open_biseccion(self):
         w = MetodoBiseccionWindow(parent=self)
+        w.showMaximized()
+        self._child = w
+
+    def _open_falsa_posicion(self):
+        w = MetodoFalsaPosicionWindow(parent=self)
         w.showMaximized()
         self._child = w
 

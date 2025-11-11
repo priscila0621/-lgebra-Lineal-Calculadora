@@ -13,6 +13,7 @@ from PySide6.QtCore import Qt, QSize
 from .theme import install_toggle_shortcut, bind_theme_icon, make_overflow_icon, gear_icon_preferred
 from .settings_qt import open_settings_dialog
 from .metodos.biseccion_qt import MetodoBiseccionWindow
+from .metodos.falsa_posicion_qt import MetodoFalsaPosicionWindow
 
 
 class MenuMetodosNumericosWindow(QMainWindow):
@@ -47,6 +48,11 @@ class MenuMetodosNumericosWindow(QMainWindow):
         btn_biseccion.setMinimumHeight(36)
         btn_biseccion.clicked.connect(self._open_biseccion)
         top_layout.addWidget(btn_biseccion)
+
+        btn_falsa_pos = QPushButton("Método de Falsa Posición")
+        btn_falsa_pos.setMinimumHeight(36)
+        btn_falsa_pos.clicked.connect(self._open_falsa_posicion)
+        top_layout.addWidget(btn_falsa_pos)
 
         top_layout.addStretch(1)
 
@@ -116,6 +122,11 @@ class MenuMetodosNumericosWindow(QMainWindow):
 
     def _open_biseccion(self):
         w = MetodoBiseccionWindow(parent=self)
+        w.showMaximized()
+        self._child = w
+
+    def _open_falsa_posicion(self):
+        w = MetodoFalsaPosicionWindow(parent=self)
         w.showMaximized()
         self._child = w
 
