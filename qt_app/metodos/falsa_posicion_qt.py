@@ -128,6 +128,22 @@ class MetodoFalsaPosicionWindow(bq.MetodoBiseccionWindow):
             if not intervals:
                 QMessageBox.warning(self, "Aviso", "No se detectaron intervalos donde la función cambie de signo.")
                 return
+            # Rellenar los text boxes de los intervalos detectados en las tarjetas
+            try:
+                total = len(intervals)
+                if total > 0:
+                    if self.root_count.value() < total:
+                        self.root_count.setValue(total)
+                    for idx_i, (a_det, b_det) in enumerate(intervals, start=1):
+                        if idx_i - 1 < len(self.root_cards):
+                            card_i = self.root_cards[idx_i - 1]
+                            try:
+                                card_i.a_edit.setText(bq._format_number(a_det))
+                                card_i.b_edit.setText(bq._format_number(b_det))
+                            except Exception:
+                                pass
+            except Exception:
+                pass
             any_success = False
             for a, b in intervals:
                 try:
@@ -162,6 +178,19 @@ class MetodoFalsaPosicionWindow(bq.MetodoBiseccionWindow):
                 QMessageBox.warning(self, "Aviso", f"No se pudo calcular la raíz #{card_idx} (intervalo [{a}, {b}]): {exc}")
                 continue
 
+        # Quitar duplicados por valor de ra�z
+        _unique_res = []
+        _seen_keys = set()
+        for _it in resultados:
+            try:
+                _key = round(float(_it[3]), 10)
+            except Exception:
+                _key = _it[3]
+            if _key in _seen_keys:
+                continue
+            _seen_keys.add(_key)
+            _unique_res.append(_it)
+        resultados = _unique_res
         if not resultados:
             QMessageBox.information(self, "Resultados", "No se encontraron raíces para los intervalos ingresados.")
             return

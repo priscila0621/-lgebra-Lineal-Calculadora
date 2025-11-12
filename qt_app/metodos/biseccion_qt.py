@@ -1,3 +1,4 @@
+
 from math import isfinite
 import re
 import math
@@ -1116,6 +1117,8 @@ class MetodoBiseccionWindow(QMainWindow):
     def _calcular(self):
         resultados = []
         display_idx = 1
+        skip_additional = False
+        skip_additional = False
 
         if not self.root_cards:
             QMessageBox.warning(self, "Aviso", "No hay formularios disponibles.")
@@ -1172,6 +1175,22 @@ class MetodoBiseccionWindow(QMainWindow):
             if not intervals:
                 QMessageBox.warning(self, "Aviso", "No se detectaron intervalos donde la función cambie de signo.")
                 return
+            # Rellenar los text boxes de los intervalos detectados en las tarjetas
+            try:
+                total = len(intervals)
+                if total > 0:
+                    if self.root_count.value() < total:
+                        self.root_count.setValue(total)
+                    for idx_i, (a_det, b_det) in enumerate(intervals, start=1):
+                        if idx_i - 1 < len(self.root_cards):
+                            card_i = self.root_cards[idx_i - 1]
+                            try:
+                                card_i.a_edit.setText(_format_number(a_det))
+                                card_i.b_edit.setText(_format_number(b_det))
+                            except Exception:
+                                pass
+            except Exception:
+                pass
             any_success = False
             for a, b in intervals:
                 try:
@@ -1183,30 +1202,44 @@ class MetodoBiseccionWindow(QMainWindow):
                     QMessageBox.warning(self, "Aviso", f"Bisección en [{a}, {b}] falló: {exc}")
                     continue
             if not any_success:
-                QMessageBox.warning(self, "Aviso", "No se encontraron raíces en los intervalos detectados.")
+                QMessageBox.warning(self, "Aviso", "No se encontraron ra??ces en los intervalos detectados.")
                 return
+            skip_additional = True
 
-        # Procesar raíces adicionales: solo requieren intervalos, reutilizan expr1 y tol
-        for card_idx, card in enumerate(self.root_cards[1:], start=2):
-            _expr, a_txt, b_txt, _tol_txt, _approx_txt = card.values()
-            if not (a_txt and b_txt):
-                # Si no hay intervalo, omitir esta tarjeta pero no abortar el resto
-                QMessageBox.warning(self, "Aviso", f"La raíz #{card_idx} no tiene intervalo. Se omitirá.")
-                continue
+        # Procesar ra??ces adicionales: solo requieren intervalos, reutilizan expr1 y tol
+        if not skip_additional:
+            for card_idx, card in enumerate(self.root_cards[1:], start=2):
+                _expr, a_txt, b_txt, _tol_txt, _approx_txt = card.values()
+                if not (a_txt and b_txt):
+                    # Si no hay intervalo, omitir esta tarjeta pero no abortar el resto
+                    QMessageBox.warning(self, "Aviso", f"La ra??z #{card_idx} no tiene intervalo. Se omitiro.")
+                    continue
+                try:
+                    a = _parse_numeric(a_txt)
+                    b = _parse_numeric(b_txt)
+                except Exception as exc:
+                    QMessageBox.warning(self, "Aviso", f"Intervalo involido en la ra??z #{card_idx}: {exc}")
+                    continue
+                try:
+                    pasos, raiz, fc, iteraciones = _run_bisection(func, a, b, tol)
+                    resultados.append((display_idx, expr1, pasos, raiz, fc, iteraciones, None))
+                    display_idx += 1
+                except Exception as exc:
+                    QMessageBox.warning(self, "Aviso", f"No se pudo calcular la ra??z #{card_idx} (intervalo [{a}, {b}]): {exc}")
+                    continue
+        # Quitar duplicados por valor de ra�z
+        _unique_res = []
+        _seen_keys = set()
+        for _it in resultados:
             try:
-                a = _parse_numeric(a_txt)
-                b = _parse_numeric(b_txt)
-            except Exception as exc:
-                QMessageBox.warning(self, "Aviso", f"Intervalo inválido en la raíz #{card_idx}: {exc}")
+                _key = round(float(_it[3]), 10)
+            except Exception:
+                _key = _it[3]
+            if _key in _seen_keys:
                 continue
-            try:
-                pasos, raiz, fc, iteraciones = _run_bisection(func, a, b, tol)
-                resultados.append((display_idx, expr1, pasos, raiz, fc, iteraciones, None))
-                display_idx += 1
-            except Exception as exc:
-                QMessageBox.warning(self, "Aviso", f"No se pudo calcular la raíz #{card_idx} (intervalo [{a}, {b}]): {exc}")
-                continue
-
+            _seen_keys.add(_key)
+            _unique_res.append(_it)
+        resultados = _unique_res
         if not resultados:
             QMessageBox.information(self, "Resultados", "No se encontraron raíces para los intervalos ingresados.")
             return
@@ -1316,6 +1349,14 @@ class MetodoBiseccionWindow(QMainWindow):
                 f"La raíz es: {raiz_txt}.",
                 f"El margen de error es: {error_txt}.",
             ]
+            # Agregar intervalo utilizado si está disponible en los pasos
+            try:
+                if pasos:
+                    a0 = _format_number(pasos[0].a)
+                    b0 = _format_number(pasos[0].b)
+                    summary_lines.insert(1, f"Intervalo usado: [{a0}, {b0}].")
+            except Exception:
+                pass
             if approx_value is not None:
                 approx_txt = _format_number(approx_value)
                 diff_txt = _format_number(abs(raiz - approx_value))
