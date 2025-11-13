@@ -193,14 +193,25 @@ class SelectorInicioWindow(QMainWindow):
         except Exception:
             return relpath
 
+    def _restore_focus(self):
+        self._child = None
+        self.show()
+        try:
+            self.activateWindow()
+            self.raise_()
+        except Exception:
+            pass
+
     def _open_algebra(self):
-        w = MenuPrincipalWindow(module="algebra", parent=self)
+        w = MenuPrincipalWindow(module="algebra", on_exit=self._restore_focus)
+        w.setAttribute(Qt.WA_DeleteOnClose, True)
         w.showMaximized()
         self._child = w
         self.hide()
 
     def _open_numerico(self):
-        w = MenuNumericoPrincipalWindow(parent=self)
+        w = MenuNumericoPrincipalWindow(on_exit=self._restore_focus)
+        w.setAttribute(Qt.WA_DeleteOnClose, True)
         w.showMaximized()
         self._child = w
         self.hide()

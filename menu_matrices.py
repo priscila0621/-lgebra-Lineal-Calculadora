@@ -48,7 +48,6 @@ class MenuMatrices:
 
     def _abrir_operacion(self, app_cls, descripcion):
         try:
-            self.root.withdraw()
             top = tk.Toplevel(self.root)
             # Si el usuario cierra la ventana con la X, restaurar esta ventana
             def _on_close():

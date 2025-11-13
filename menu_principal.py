@@ -61,7 +61,6 @@ class MenuPrincipal:
     # ======================
     def _abrir_toplevel(self, app_cls, descripcion: str):
         try:
-            self.root.withdraw()
             top = tk.Toplevel(self.root)
 
             def _on_close():

@@ -1,3 +1,5 @@
+from typing import Callable, Optional
+
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -30,8 +32,10 @@ from .settings_qt import open_settings_dialog
 
 
 class MenuPrincipalWindow(QMainWindow):
-    def __init__(self, module: str = "algebra", parent=None):
+    def __init__(self, module: str = "algebra", parent=None, on_exit: Optional[Callable[[], None]] = None):
         super().__init__(parent)
+        self._on_exit = on_exit
+        self._exit_notified = False
         # Contexto del módulo seleccionado ("algebra" o "all").
         # Por defecto mostramos solo las opciones de Álgebra Lineal.
         self.module = (module or "algebra").lower()
@@ -252,6 +256,25 @@ class MenuPrincipalWindow(QMainWindow):
 
         install_toggle_shortcut(self)
 
+    def _notify_exit(self):
+        if self._exit_notified:
+            return
+        self._exit_notified = True
+        if callable(self._on_exit):
+            try:
+                self._on_exit()
+            except Exception:
+                pass
+        else:
+            parent = self.parent()
+            if parent is not None:
+                parent.show()
+                parent.activateWindow()
+
+    def closeEvent(self, event):
+        self._notify_exit()
+        super().closeEvent(event)
+
     def _open_sistemas(self):
         self.s = MenuSistemasWindow(parent=self)
         self.s.showMaximized()
@@ -276,11 +299,4 @@ class MenuPrincipalWindow(QMainWindow):
         open_settings_dialog(self)
 
     def _go_back(self):
-        try:
-            parent = self.parent()
-            self.close()
-            if parent is not None:
-                parent.show()
-                parent.activateWindow()
-        except Exception:
-            self.close()
+        self.close()

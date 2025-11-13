@@ -196,7 +196,6 @@ class MenuInicio:
         from menu_algebra import MenuAlgebra
         # Mantener un solo root y usar Toplevel para conservar el icono en la barra de tareas
         try:
-            self.root.withdraw()
             top = tk.Toplevel(self.root)
 
             def _on_close():
@@ -217,7 +216,6 @@ class MenuInicio:
     def _open_numerico(self):
         from menu_metodos_numericos import MenuMetodosNumericos
         try:
-            self.root.withdraw()
             top = tk.Toplevel(self.root)
 
             def _on_close():

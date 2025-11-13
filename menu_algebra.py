@@ -70,7 +70,6 @@ class MenuAlgebra:
 
     def _abrir_toplevel(self, app_cls, descripcion: str):
         try:
-            self.root.withdraw()
             top = tk.Toplevel(self.root)
 
             # Al cerrar la ventana hija con la X, restaurar el root

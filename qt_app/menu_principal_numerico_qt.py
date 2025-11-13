@@ -1,3 +1,5 @@
+from typing import Callable, Optional
+
 from PySide6.QtWidgets import (
     QMainWindow,
     QWidget,
@@ -26,8 +28,10 @@ from .metodos.falsa_posicion_qt import MetodoFalsaPosicionWindow
 
 
 class MenuNumericoPrincipalWindow(QMainWindow):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, on_exit: Optional[Callable[[], None]] = None):
         super().__init__(parent)
+        self._on_exit = on_exit
+        self._exit_notified = False
         self.setWindowTitle("Análisis numérico")
 
         root = QWidget()
@@ -205,6 +209,25 @@ class MenuNumericoPrincipalWindow(QMainWindow):
 
         install_toggle_shortcut(self)
 
+    def _notify_exit(self):
+        if self._exit_notified:
+            return
+        self._exit_notified = True
+        if callable(self._on_exit):
+            try:
+                self._on_exit()
+            except Exception:
+                pass
+        else:
+            parent = self.parent()
+            if parent is not None:
+                parent.show()
+                parent.activateWindow()
+
+    def closeEvent(self, event):
+        self._notify_exit()
+        super().closeEvent(event)
+
     def _open_biseccion(self):
         w = MetodoBiseccionWindow(parent=self)
         w.showMaximized()
@@ -219,11 +242,4 @@ class MenuNumericoPrincipalWindow(QMainWindow):
         open_settings_dialog(self)
 
     def _go_back(self):
-        try:
-            parent = self.parent()
-            self.close()
-            if parent is not None:
-                parent.show()
-                parent.activateWindow()
-        except Exception:
-            self.close()
+        self.close()
