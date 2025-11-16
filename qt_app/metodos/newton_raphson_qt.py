@@ -241,7 +241,38 @@ class MetodoNewtonRaphsonWindow(bq.MetodoBiseccionWindow):
                 except Exception:
                     y = float("nan")
                 ys.append(y)
-            ax.plot(xs, ys, label=f"f(x) #{idx}", linewidth=1.6, alpha=0.9)
+            # Romper las líneas en saltos/discontinuidades grandes para evitar
+            # conexiones que no corresponden a la función (mejora similitud con Desmos)
+            try:
+                if np is not None:
+                    yarr = np.array(ys, dtype=float)
+                    # mask donde no es finito
+                    bad = ~np.isfinite(yarr)
+                    # diffs absolutas
+                    diffs = np.abs(np.diff(yarr))
+                    median = np.nanmedian(diffs) if diffs.size > 0 else 0.0
+                    thresh = max(1e3, median * 100.0)
+                    large_jump = np.concatenate(([False], diffs > thresh))
+                    mask = bad | large_jump
+                    yplot = yarr.copy()
+                    yplot[mask] = np.nan
+                    ax.plot(xs, yplot, label=f"f(x) #{idx}", linewidth=1.6, alpha=0.9)
+                else:
+                    # Fallback sin numpy: insertar NaN en listas cuando saltos grandes
+                    yplot = list(ys)
+                    diffs = [abs(yplot[i+1] - yplot[i]) if (isinstance(yplot[i+1], float) and isinstance(yplot[i], float)) else float('nan') for i in range(len(yplot)-1)]
+                    finite_diffs = [d for d in diffs if not (d != d)]
+                    median = sorted(finite_diffs)[len(finite_diffs)//2] if finite_diffs else 0.0
+                    thresh = max(1e3, median * 100.0)
+                    for i, d in enumerate(diffs):
+                        try:
+                            if d > thresh:
+                                yplot[i+1] = float('nan')
+                        except Exception:
+                            yplot[i+1] = float('nan')
+                    ax.plot(xs, yplot, label=f"f(x) #{idx}", linewidth=1.6, alpha=0.9)
+            except Exception:
+                ax.plot(xs, ys, label=f"f(x) #{idx}", linewidth=1.6, alpha=0.9)
             try:
                 x0 = bq._parse_numeric(card.approx_edit.text().strip())
                 ax.axvline(x0, color="#6E4B5E", linestyle=":", alpha=0.3)
@@ -288,6 +319,21 @@ class MetodoNewtonRaphsonWindow(bq.MetodoBiseccionWindow):
         else:
             x_min, x_max = self._current_x_range()
 
+        # Asegurar que la ventana incluya también la vista previa (si el usuario la vio antes),
+        # para que la función no aparezca con zoom distinto tras calcular.
+        try:
+            prev_min, prev_max = self._current_x_range()
+            x_min = min(x_min, prev_min)
+            x_max = max(x_max, prev_max)
+        except Exception:
+            pass
+
+        # Evitar rango demasiado pequeño que provoque distorsión en la forma
+        if x_max - x_min < 1e-6:
+            mid = (x_min + x_max) / 2.0
+            x_min = mid - 1.0
+            x_max = mid + 1.0
+
         try:
             import numpy as np
         except Exception:
@@ -314,13 +360,72 @@ class MetodoNewtonRaphsonWindow(bq.MetodoBiseccionWindow):
                     y = float("nan")
                 ys.append(y)
             color = colors[i % len(colors)] if colors else None
-            ax.plot(xs, ys, label=f"f(x) #{idx}", color=color, linewidth=1.6, alpha=0.9)
+            # Romper en discontinuidades grandes para no dibujar líneas que no existen
+            try:
+                if np is not None:
+                    yarr = np.array(ys, dtype=float)
+                    bad = ~np.isfinite(yarr)
+                    diffs = np.abs(np.diff(yarr))
+                    median = np.nanmedian(diffs) if diffs.size > 0 else 0.0
+                    thresh = max(1e3, median * 100.0)
+                    large_jump = np.concatenate(([False], diffs > thresh))
+                    mask = bad | large_jump
+                    yplot = yarr.copy()
+                    yplot[mask] = np.nan
+                    ax.plot(xs, yplot, label=f"f(x) #{idx}", color=color, linewidth=1.6, alpha=0.9)
+                else:
+                    yplot = list(ys)
+                    diffs = [abs(yplot[i+1] - yplot[i]) if (isinstance(yplot[i+1], float) and isinstance(yplot[i], float)) else float('nan') for i in range(len(yplot)-1)]
+                    finite_diffs = [d for d in diffs if not (d != d)]
+                    median = sorted(finite_diffs)[len(finite_diffs)//2] if finite_diffs else 0.0
+                    thresh = max(1e3, median * 100.0)
+                    for i, d in enumerate(diffs):
+                        try:
+                            if d > thresh:
+                                yplot[i+1] = float('nan')
+                        except Exception:
+                            yplot[i+1] = float('nan')
+                    ax.plot(xs, yplot, label=f"f(x) #{idx}", color=color, linewidth=1.6, alpha=0.9)
+            except Exception:
+                ax.plot(xs, ys, label=f"f(x) #{idx}", color=color, linewidth=1.6, alpha=0.9)
             for paso in pasos:
-                ax.scatter(paso.x, paso.fx, color=color, s=50, alpha=0.85)
+                # Punto actual en la curva
+                ax.scatter(paso.x, paso.fx, color=color, s=50, alpha=0.9, zorder=5)
+                # Dibujar la tangente en x_n: y = f(x_n) + f'(x_n)*(x - x_n)
+                try:
+                    dfx = paso.dfx
+                    if np is not None:
+                        span = (x_max - x_min) if (x_max - x_min) != 0 else 1.0
+                        tpad = max(abs(paso.x) * 0.1, span * 0.08)
+                        txs = np.linspace(paso.x - tpad, paso.x + tpad, 80)
+                        tys = [paso.fx + dfx * (tx - paso.x) for tx in txs]
+                    else:
+                        span = (x_max - x_min) if (x_max - x_min) != 0 else 1.0
+                        tpad = max(abs(paso.x) * 0.1, span * 0.08)
+                        txs = [paso.x - tpad + (2 * tpad) * i / 79 for i in range(80)]
+                        tys = [paso.fx + dfx * (tx - paso.x) for tx in txs]
+                    ax.plot(txs, tys, color=color, linestyle=(0, (3, 3)), linewidth=1.0, alpha=0.7, zorder=3)
+                except Exception:
+                    pass
+
+                # Línea guía desde (x_n, f(x_n)) hasta (x_{n+1}, 0) para mostrar la intersección con el eje X
+                try:
+                    x_next = paso.x_next
+                    ax.plot([paso.x, x_next], [paso.fx, 0.0], color=color, linestyle='--', alpha=0.8, linewidth=1.0, zorder=4)
+                    # Línea vertical para mostrar el salto desde el eje X hacia f(x_{n+1})
+                    try:
+                        fy_next = func(float(x_next))
+                        ax.plot([x_next, x_next], [0.0, fy_next], color=color, linestyle=':', alpha=0.8, linewidth=1.0, zorder=4)
+                        ax.scatter(x_next, fy_next, color=color, s=36, alpha=0.9, zorder=5)
+                    except Exception:
+                        # igual marcar el punto en el eje X aunque no se evalúe f(x_next)
+                        ax.scatter(x_next, 0.0, color=color, s=30, alpha=0.7, zorder=4)
+                except Exception:
+                    pass
             try:
                 r_x = float(raiz)
                 marker = markers[i % len(markers)]
-                ax.plot(r_x, 0.0, marker=marker, color=color, markersize=10, label=f"Raíz {i+1}")
+                ax.scatter([r_x], [0.0], marker=marker, color=color, s=120, label=f"Raíz {i+1}", zorder=6)
             except Exception:
                 pass
 
