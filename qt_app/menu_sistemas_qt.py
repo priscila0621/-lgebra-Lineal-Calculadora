@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QToolButton,
     QMenu,
+    QMessageBox,
 )
 from PySide6.QtCore import Qt
 from .theme import install_toggle_shortcut, bind_theme_icon, make_overflow_icon, gear_icon_preferred
@@ -112,18 +113,48 @@ class MenuSistemasWindow(QMainWindow):
             self.close()
 
     def _open_gauss(self):
-        from .sistemas.gauss_jordan_qt import GaussJordanWindow
-
-        w = GaussJordanWindow(parent=self)
-        w.showMaximized()
-        self._child = w
+        try:
+            from .sistemas.gauss_jordan_qt import GaussJordanWindow
+            w = GaussJordanWindow(parent=self)
+            w.showMaximized()
+            self._child = w
+        except Exception as exc:
+            import traceback, os
+            tb = traceback.format_exc()
+            path = os.path.join(os.path.dirname(__file__), "error_traceback.txt")
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(tb)
+            except Exception:
+                pass
+            msg = f"No se pudo abrir la ventana. Se ha guardado el detalle en:\n{path}\n\nPor favor, pega aquí el contenido de ese archivo.\n\nError: {exc}"
+            try:
+                QMessageBox.critical(self, "Error al abrir Gauss-Jordan", msg)
+            except Exception:
+                print("Error abriendo Gauss-Jordan:", exc)
+                print(tb)
 
     def _open_cramer(self):
-        from .sistemas.cramer_qt import CramerWindow
-
-        w = CramerWindow(parent=self)
-        w.showMaximized()
-        self._child = w
+        try:
+            from .sistemas.cramer_qt import CramerWindow
+            w = CramerWindow(parent=self)
+            w.showMaximized()
+            self._child = w
+        except Exception as exc:
+            import traceback, os
+            tb = traceback.format_exc()
+            path = os.path.join(os.path.dirname(__file__), "error_traceback.txt")
+            try:
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(tb)
+            except Exception:
+                pass
+            msg = f"No se pudo abrir la ventana. Se ha guardado el detalle en:\n{path}\n\nPor favor, pega aquí el contenido de ese archivo.\n\nError: {exc}"
+            try:
+                QMessageBox.critical(self, "Error al abrir Cramer", msg)
+            except Exception:
+                print("Error abriendo Cramer:", exc)
+                print(tb)
 
     def _open_settings(self):
         open_settings_dialog(self)

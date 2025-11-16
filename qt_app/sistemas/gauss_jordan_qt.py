@@ -1,4 +1,8 @@
-from PySide6.QtWidgets import (\r\n    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,\r\n    QScrollArea, QGridLayout, QLineEdit, QTextEdit, QMessageBox, QFrame,\r\n    QDialog, QDialogButtonBox, QPlainTextEdit, QSlider, QToolButton, QMenu\r\n)
+from PySide6.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QScrollArea, QGridLayout, QLineEdit, QTextEdit, QMessageBox, QFrame,
+    QDialog, QDialogButtonBox, QPlainTextEdit, QSlider, QToolButton, QMenu
+)
 from PySide6.QtCore import Qt, QSize
 from fractions import Fraction
 from copy import deepcopy
@@ -109,10 +113,10 @@ class GaussJordanWindow(QMainWindow):
         top.addWidget(self.btn_ingresar_ecuaciones)
         top.addSpacing(18)
         more_btn = QToolButton()
-        # sin tamaño fijo
+        # sin tamaï¿½o fijo
         more_btn.setAutoRaise(True)
         more_btn.setCursor(Qt.PointingHandCursor)
-        more_btn.setToolTip("Más opciones")
+        more_btn.setToolTip("Mï¿½s opciones")
         more_btn.setPopupMode(QToolButton.InstantPopup)
         try:
             from PySide6.QtCore import QSize
@@ -123,12 +127,13 @@ class GaussJordanWindow(QMainWindow):
             pass
         menu = QMenu(more_btn)
         try:
-            act_settings = menu.addAction(gear_icon_preferred(22), "Configuración")
+            act_settings = menu.addAction(gear_icon_preferred(22), "Configuraciï¿½n")
         except Exception:
-            act_settings = menu.addAction("Configuración")
+            act_settings = menu.addAction("Configuraciï¿½n")
         act_settings.triggered.connect(self._open_settings)
         more_btn.setMenu(menu)
-        top.addWidget(more_btn)\r\n        top.addStretch(1)
+        top.addWidget(more_btn)
+        top.addStretch(1)
 
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)

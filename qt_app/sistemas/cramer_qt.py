@@ -1,9 +1,13 @@
-from PySide6.QtWidgets import (\r\n    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,\r\n    QScrollArea, QGridLayout, QLineEdit, QTextEdit, QMessageBox, QSlider,\r\n    QToolButton, QMenu, QDialog, QDialogButtonBox, QPlainTextEdit\r\n)
+from PySide6.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
+    QScrollArea, QGridLayout, QLineEdit, QTextEdit, QMessageBox, QSlider,
+    QToolButton, QMenu, QDialog, QDialogButtonBox, QPlainTextEdit
+)
 from PySide6.QtCore import Qt, QSize
 from ..theme import install_toggle_shortcut, bind_font_scale_stylesheet, scaled_font_px, bind_theme_icon, make_overflow_icon, gear_icon_preferred
 from ..settings_qt import open_settings_dialog
 from fractions import Fraction
-from qt_app.matrices_qt import determinante_con_pasos as determinante_con_pasos_ascii
+from ..matrices_qt import determinante_con_pasos as determinante_con_pasos_ascii
 import re
 
 
@@ -155,7 +159,7 @@ class CramerWindow(QMainWindow):
         more_btn = QToolButton()
         more_btn.setAutoRaise(True)
         more_btn.setCursor(Qt.PointingHandCursor)
-        more_btn.setToolTip('Más opciones')
+        more_btn.setToolTip('Mï¿½s opciones')
         more_btn.setPopupMode(QToolButton.InstantPopup)
         try:
             bind_theme_icon(more_btn, make_overflow_icon, 20)
@@ -163,7 +167,7 @@ class CramerWindow(QMainWindow):
         except Exception:
             pass
         menu = QMenu(more_btn)
-        act_settings = menu.addAction(gear_icon_preferred(22), 'Configuración')
+        act_settings = menu.addAction(gear_icon_preferred(22), 'Configuraciï¿½n')
         act_settings.triggered.connect(self._open_settings)
         more_btn.setMenu(menu)
         top.addWidget(more_btn)
@@ -205,7 +209,7 @@ class CramerWindow(QMainWindow):
         more_btn = QToolButton()
         more_btn.setAutoRaise(True)
         more_btn.setCursor(Qt.PointingHandCursor)
-        more_btn.setToolTip('Más opciones')
+        more_btn.setToolTip('Mï¿½s opciones')
         more_btn.setPopupMode(QToolButton.InstantPopup)
         try:
             bind_theme_icon(more_btn, make_overflow_icon, 20)
@@ -213,11 +217,11 @@ class CramerWindow(QMainWindow):
         except Exception:
             pass
         menu = QMenu(more_btn)
-        act_settings = menu.addAction(gear_icon_preferred(22), 'Configuración')
+        act_settings = menu.addAction(gear_icon_preferred(22), 'Configuraciï¿½n')
         act_settings.triggered.connect(self._open_settings)
         more_btn.setMenu(menu)
         top.addWidget(more_btn)
-        # Ajuste: botón de configuración reemplazado por menú ?
+        # Ajuste: botï¿½n de configuraciï¿½n reemplazado por menï¿½ ?
         top.addStretch(1)
 
         self.scroll = QScrollArea()
