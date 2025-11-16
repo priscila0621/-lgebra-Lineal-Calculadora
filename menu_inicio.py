@@ -1,6 +1,8 @@
 import os
 import tkinter as tk
 from tkinter import ttk
+from tkinter import messagebox
+import traceback
 
 
 class MenuInicio:
@@ -196,6 +198,11 @@ class MenuInicio:
         from menu_algebra import MenuAlgebra
         # Mantener un solo root y usar Toplevel para conservar el icono en la barra de tareas
         try:
+            try:
+                self.root.withdraw()
+            except Exception:
+                pass
+
             top = tk.Toplevel(self.root)
 
             def _on_close():
@@ -212,10 +219,17 @@ class MenuInicio:
                 self.root.deiconify()
             except Exception:
                 pass
+            tb = traceback.format_exc()
+            messagebox.showerror("Error", f"Error al abrir Álgebra Lineal: {tb}")
 
     def _open_numerico(self):
         from menu_metodos_numericos import MenuMetodosNumericos
         try:
+            try:
+                self.root.withdraw()
+            except Exception:
+                pass
+
             top = tk.Toplevel(self.root)
 
             def _on_close():
@@ -231,6 +245,8 @@ class MenuInicio:
                 self.root.deiconify()
             except Exception:
                 pass
+            tb = traceback.format_exc()
+            messagebox.showerror("Error", f"Error al abrir Análisis Numérico: {tb}")
 
     def _volver_selector(self, ventana_actual):
         # Mantener compatibilidad si se invoca este flujo

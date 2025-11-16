@@ -1,5 +1,6 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
+import traceback
 from gauss_jordan_app import GaussJordanApp
 from menu_matrices import MenuMatrices
 from independencia_lineal import IndependenciaLinealApp
@@ -70,6 +71,12 @@ class MenuAlgebra:
 
     def _abrir_toplevel(self, app_cls, descripcion: str):
         try:
+            # Ocultar la ventana padre para asegurar que la nueva ventana quede visible
+            try:
+                self.root.withdraw()
+            except Exception:
+                pass
+
             top = tk.Toplevel(self.root)
 
             # Al cerrar la ventana hija con la X, restaurar el root
@@ -83,11 +90,14 @@ class MenuAlgebra:
 
             # Pasar callback de volver
             app_cls(top, volver_callback=lambda: (_on_close()))
-        except Exception:
+        except Exception as exc:
+            # Mostrar el error al usuario para facilitar depuración
             try:
                 self.root.deiconify()
             except Exception:
                 pass
+            tb = traceback.format_exc()
+            messagebox.showerror("Error", f"Error al abrir {descripcion}: {exc}\n\n{tb}")
 
     def abrir_sistema(self):
         self._abrir_toplevel(GaussJordanApp, "Sistema de ecuaciones")

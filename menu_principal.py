@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+import traceback
 from gauss_jordan_app import GaussJordanApp
 from menu_matrices import MenuMatrices
 from independencia_lineal import IndependenciaLinealApp
@@ -61,6 +62,12 @@ class MenuPrincipal:
     # ======================
     def _abrir_toplevel(self, app_cls, descripcion: str):
         try:
+            # Ocultar la ventana principal para evitar que la nueva ventana quede detrás
+            try:
+                self.root.withdraw()
+            except Exception:
+                pass
+
             top = tk.Toplevel(self.root)
 
             def _on_close():
@@ -71,6 +78,13 @@ class MenuPrincipal:
 
             top.protocol("WM_DELETE_WINDOW", _on_close)
             app_cls(top, volver_callback=lambda: (_on_close()))
+        except Exception as exc:
+            try:
+                self.root.deiconify()
+            except Exception:
+                pass
+            tb = traceback.format_exc()
+            messagebox.showerror("Error", f"Error al abrir {descripcion}: {exc}\n\n{tb}")
         except Exception:
             try:
                 self.root.deiconify()

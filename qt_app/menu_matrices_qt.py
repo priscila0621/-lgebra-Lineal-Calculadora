@@ -80,7 +80,6 @@ class MenuMatricesWindow(QMainWindow):
         more_btn.setToolTip("Más opciones")
         more_btn.setPopupMode(QToolButton.InstantPopup)
         try:
-            from PySide6.QtCore import QSize
             bind_theme_icon(more_btn, make_overflow_icon, 20)
             more_btn.setIconSize(QSize(20, 20))
         except Exception:

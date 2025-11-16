@@ -1,5 +1,6 @@
 ﻿import tkinter as tk
 from tkinter import ttk, messagebox
+import traceback
 from suma_matrices_app import SumaMatricesApp
 from resta_matrices_app import RestaMatricesApp
 from multiplicacion_matrices_app import MultiplicacionMatricesApp
@@ -48,6 +49,12 @@ class MenuMatrices:
 
     def _abrir_operacion(self, app_cls, descripcion):
         try:
+            # Ocultar la ventana de menú de matrices para que la operación quede visible
+            try:
+                self.root.withdraw()
+            except Exception:
+                pass
+
             top = tk.Toplevel(self.root)
             # Si el usuario cierra la ventana con la X, restaurar esta ventana
             def _on_close():
@@ -62,7 +69,8 @@ class MenuMatrices:
                 self.root.deiconify()
             except Exception:
                 pass
-            messagebox.showerror("Error", f"Ocurrió un error al abrir {descripcion}: {exc}")
+            tb = traceback.format_exc()
+            messagebox.showerror("Error", f"Ocurrió un error al abrir {descripcion}: {exc}\n\n{tb}")
         finally:
             try:
                 self.boton_volver.lift()
