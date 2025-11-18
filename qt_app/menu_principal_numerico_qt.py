@@ -26,6 +26,7 @@ from .settings_qt import open_settings_dialog
 from .metodos.biseccion_qt import MetodoBiseccionWindow
 from .metodos.falsa_posicion_qt import MetodoFalsaPosicionWindow
 from .metodos.newton_raphson_qt import MetodoNewtonRaphsonWindow
+from .metodos.secante_qt import MetodoSecanteWindow
 
 
 class MenuNumericoPrincipalWindow(QMainWindow):
@@ -122,6 +123,11 @@ class MenuNumericoPrincipalWindow(QMainWindow):
         self.btn_newton.setMinimumHeight(44)
         self.btn_newton.clicked.connect(self._open_newton_raphson)
         nav_lay.addWidget(self.btn_newton)
+        self.btn_secante = QPushButton("Método de la secante")
+        self.btn_secante.setMinimumHeight(44)
+        self.btn_secante.clicked.connect(self._open_secante)
+        nav_lay.addWidget(self.btn_secante)
+        
 
         nav_lay.addStretch(1)
 
@@ -175,8 +181,8 @@ class MenuNumericoPrincipalWindow(QMainWindow):
         title_box.addWidget(heading)
 
         strapline = QLabel(
-            "Herramientas de análisis numérico con enfoque práctico. "
-            "Explora bisección, falsa posición y Newton-Raphson desde una sola vista."
+            "Herramientas de analisis numerico con enfoque practico. "
+            "Explora biseccion, falsa posicion, secante y Newton-Raphson desde una sola vista."
         )
         strapline.setObjectName("Subtitle")
         strapline.setWordWrap(True)
@@ -186,9 +192,10 @@ class MenuNumericoPrincipalWindow(QMainWindow):
 
         details = QLabel(
             "Disponible ahora:\n"
-            "• Método de bisección con validación del intervalo y reporte paso a paso.\n"
-            "• Método de falsa posición con el mismo flujo guiado, ideal para intervalos dinámicos.\n"
-            "• Método de Newton-Raphson con derivada numérica y seguimiento iterativo detallado."
+            "- Metodo de biseccion con validacion del intervalo y reporte paso a paso.\n"
+            "- Metodo de falsa posicion con el mismo flujo guiado, ideal para intervalos dinamicos.\n"
+            "- Metodo de Newton-Raphson con derivada numerica y seguimiento iterativo detallado.\n"
+            "- Metodo de la secante con dos valores iniciales, sin requerir cambio de signo."
         )
         details.setWordWrap(True)
         details.setAlignment(Qt.AlignLeft)
@@ -248,6 +255,11 @@ class MenuNumericoPrincipalWindow(QMainWindow):
 
     def _open_newton_raphson(self):
         w = MetodoNewtonRaphsonWindow(parent=self)
+        w.showMaximized()
+        self._child = w
+
+    def _open_secante(self):
+        w = MetodoSecanteWindow(parent=self)
         w.showMaximized()
         self._child = w
 
