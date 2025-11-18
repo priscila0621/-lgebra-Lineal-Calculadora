@@ -469,7 +469,14 @@ class MetodoSecanteWindow(bq.MetodoBiseccionWindow):
                 break
         for card_widget, (_idx, _expr, pasos, raiz, fc, iteraciones, _ap) in zip(cards, resultados):
             labels = card_widget.findChildren(QLabel)
-            summary_label = next((lbl for lbl in labels if "El metodo converge" in (lbl.text() or "")), None)
+            summary_label = next(
+                (
+                    lbl
+                    for lbl in labels
+                    if any(keyword in (lbl.text() or "").lower() for keyword in ("converge", "intervalo"))
+                ),
+                None,
+            )
             if summary_label is not None:
                 tol_txt = bq._format_number(tol)
                 err = abs(fc)
