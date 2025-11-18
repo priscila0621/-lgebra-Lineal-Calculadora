@@ -609,15 +609,47 @@ class MetodoNewtonRaphsonWindow(bq.MetodoBiseccionWindow):
                 err = abs(fc)
                 err_txt = bq._format_number(err)
                 indicator = "✓ dentro del límite" if err <= tol else "✗ fuera del límite"
-                summary_label.setText(
-                    "\n".join(
-                        [
-                            f"El método converge con {iteraciones} iteraciones.",
-                            f"La raíz es: {bq._format_number(raiz)}.",
-                            f"Tolerancia: {tol_txt} — Error alcanzado: {err_txt} ({indicator})",
-                        ]
-                    )
-                )
+                summary_lines = [
+                    f"El método converge con {iteraciones} iteraciones.",
+                    f"La raíz es: {bq._format_number(raiz)}.",
+                    f"Tolerancia: {tol_txt} — Error alcanzado: {err_txt} ({indicator})",
+                ]
+                # Intentar obtener la derivada simbólica de la función y mostrarla.
+                try:
+                    try:
+                        import sympy as _sp
+                    except Exception:
+                        _sp = None
+                    if _sp is not None:
+                        # Preparar expresión similar a cómo se procesa para evaluación
+                        cleaned = bq._normalize_expression(_expr or "")
+                        # Manejar igualdades del tipo expr = 0 -> (left)-(right)
+                        if "=" in cleaned:
+                            parts = cleaned.split("=")
+                            if len(parts) == 2:
+                                left, right = (p.strip() for p in parts)
+                                cleaned = f"({left})-({right})"
+                        # Usar sympy para derivar
+                        x = _sp.Symbol("x")
+                        try:
+                            sym_expr = _sp.sympify(cleaned, locals=dict(_sp.__dict__))
+                            sym_d = _sp.simplify(_sp.diff(sym_expr, x))
+                            d_str = str(sym_d)
+                            # Convertir a notación con superíndices para consistencia visual
+                            try:
+                                d_display = bq.superscriptify(d_str)
+                            except Exception:
+                                d_display = d_str
+                            summary_lines.append(f"Derivada simbólica: f'(x) = {d_display}")
+                        except Exception:
+                            # Si sympify falla, no interrumpir el flujo
+                            pass
+                    else:
+                        # SymPy no instalado: informar al usuario discretamente
+                        summary_lines.append("Derivada simbólica: (instala SymPy para verla)")
+                except Exception:
+                    pass
+                summary_label.setText("\n".join(summary_lines))
             start_label = next((lbl for lbl in labels if "Intervalo usado" in (lbl.text() or "")), None)
             if start_label is not None:
                 if pasos:
