@@ -4,6 +4,8 @@ from typing import Callable, List, Tuple
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QComboBox,
+    QHBoxLayout,
     QLabel,
     QMessageBox,
     QDialog,
@@ -186,7 +188,24 @@ class MetodoSecanteWindow(bq.MetodoBiseccionWindow):
             self.btn_calcular.setText("Calcular secante")
         except Exception:
             pass
+        self._add_sign_filter_control()
         self._update_static_labels()
+
+    def _add_sign_filter_control(self) -> None:
+        """Inserta un selector para filtrar raices por signo en el panel de formularios."""
+        try:
+            self.sign_filter = QComboBox()
+            self.sign_filter.addItem("Todas las raices", "all")
+            self.sign_filter.addItem("Solo raices positivas", "positive")
+            self.sign_filter.addItem("Solo raices negativas", "negative")
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            row.addWidget(QLabel("Mostrar:"))
+            row.addWidget(self.sign_filter, 1)
+            row.addStretch(1)
+            self.forms_layout.insertLayout(0, row)
+        except Exception:
+            self.sign_filter = None
 
     def _update_static_labels(self) -> None:
         replacements = {
@@ -447,9 +466,9 @@ class MetodoSecanteWindow(bq.MetodoBiseccionWindow):
                 continue
             seen.add(key)
             unique_results.append(item)
-        resultados = unique_results
+        resultados = self._filter_results_by_sign(unique_results)
         if not resultados:
-            QMessageBox.information(self, "Resultados", "No se encontraron raices.")
+            QMessageBox.information(self, "Resultados", "No se encontraron raices que coincidan con el filtro seleccionado.")
             return
 
         super()._render_resultados(resultados)
@@ -458,6 +477,29 @@ class MetodoSecanteWindow(bq.MetodoBiseccionWindow):
             self._draw_results_on_canvas(resultados)
         except Exception:
             pass
+
+    def _filter_results_by_sign(self, resultados):
+        if not resultados:
+            return resultados
+        try:
+            mode = self.sign_filter.currentData() if self.sign_filter is not None else "all"
+        except Exception:
+            mode = "all"
+        if mode not in ("positive", "negative"):
+            return resultados
+        filtered = []
+        for item in resultados:
+            raiz = item[3]
+            try:
+                value = float(raiz)
+            except Exception:
+                filtered.append(item)
+                continue
+            if mode == "positive" and value >= 0:
+                filtered.append(item)
+            elif mode == "negative" and value <= 0:
+                filtered.append(item)
+        return filtered
 
     def _adjust_result_cards(self, resultados, tol) -> None:
         cards = []
