@@ -635,9 +635,11 @@ class MetodoNewtonRaphsonWindow(bq.MetodoBiseccionWindow):
                             sym_expr = _sp.sympify(cleaned, locals=dict(_sp.__dict__))
                             sym_d = _sp.simplify(_sp.diff(sym_expr, x))
                             d_str = str(sym_d)
-                            # Convertir a notación con superíndices para consistencia visual
+                            # Convertir '**' a '^' para que `superscriptify` pueda manejar exponentes
                             try:
-                                d_display = bq.superscriptify(d_str)
+                                d_tmp = bq.re.sub(r"\*\*\(([^)]*)\)", r"^(\1)", d_str)
+                                d_tmp = bq.re.sub(r"\*\*([+-]?\d+)", r"^\1", d_tmp)
+                                d_display = bq.superscriptify(d_tmp)
                             except Exception:
                                 d_display = d_str
                             summary_lines.append(f"Derivada simbólica: f'(x) = {d_display}")
