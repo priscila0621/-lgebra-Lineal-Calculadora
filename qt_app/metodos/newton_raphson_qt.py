@@ -360,6 +360,7 @@ class MetodoNewtonRaphsonWindow(bq.MetodoBiseccionWindow):
                     y = float("nan")
                 ys.append(y)
             color = colors[i % len(colors)] if colors else None
+            iter_color = "#555555"
             # Romper en discontinuidades grandes para no dibujar líneas que no existen
             try:
                 if np is not None:
@@ -390,7 +391,7 @@ class MetodoNewtonRaphsonWindow(bq.MetodoBiseccionWindow):
                 ax.plot(xs, ys, label=f"f(x) #{idx}", color=color, linewidth=1.6, alpha=0.9)
             for paso in pasos:
                 # Punto actual en la curva
-                ax.scatter(paso.x, paso.fx, color=color, s=50, alpha=0.9, zorder=5)
+                ax.scatter(paso.x, paso.fx, color=iter_color, s=50, alpha=0.9, zorder=5)
                 # Dibujar la tangente en x_n: y = f(x_n) + f'(x_n)*(x - x_n)
                 try:
                     dfx = paso.dfx
@@ -404,22 +405,22 @@ class MetodoNewtonRaphsonWindow(bq.MetodoBiseccionWindow):
                         tpad = max(abs(paso.x) * 0.1, span * 0.08)
                         txs = [paso.x - tpad + (2 * tpad) * i / 79 for i in range(80)]
                         tys = [paso.fx + dfx * (tx - paso.x) for tx in txs]
-                    ax.plot(txs, tys, color=color, linestyle=(0, (3, 3)), linewidth=1.0, alpha=0.7, zorder=3)
+                    ax.plot(txs, tys, color=iter_color, linestyle=(0, (3, 3)), linewidth=1.0, alpha=0.7, zorder=3)
                 except Exception:
                     pass
 
                 # Línea guía desde (x_n, f(x_n)) hasta (x_{n+1}, 0) para mostrar la intersección con el eje X
                 try:
                     x_next = paso.x_next
-                    ax.plot([paso.x, x_next], [paso.fx, 0.0], color=color, linestyle='--', alpha=0.8, linewidth=1.0, zorder=4)
+                    ax.plot([paso.x, x_next], [paso.fx, 0.0], color=iter_color, linestyle='--', alpha=0.8, linewidth=1.0, zorder=4)
                     # Línea vertical para mostrar el salto desde el eje X hacia f(x_{n+1})
                     try:
                         fy_next = func(float(x_next))
-                        ax.plot([x_next, x_next], [0.0, fy_next], color=color, linestyle=':', alpha=0.8, linewidth=1.0, zorder=4)
-                        ax.scatter(x_next, fy_next, color=color, s=36, alpha=0.9, zorder=5)
+                        ax.plot([x_next, x_next], [0.0, fy_next], color=iter_color, linestyle=':', alpha=0.8, linewidth=1.0, zorder=4)
+                        ax.scatter(x_next, fy_next, color=iter_color, s=36, alpha=0.9, zorder=5)
                     except Exception:
                         # igual marcar el punto en el eje X aunque no se evalúe f(x_next)
-                        ax.scatter(x_next, 0.0, color=color, s=30, alpha=0.7, zorder=4)
+                        ax.scatter(x_next, 0.0, color=iter_color, s=30, alpha=0.7, zorder=4)
                 except Exception:
                     pass
             try:
