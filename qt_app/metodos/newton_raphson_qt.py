@@ -639,6 +639,12 @@ class MetodoNewtonRaphsonWindow(bq.MetodoBiseccionWindow):
                             try:
                                 d_tmp = bq.re.sub(r"\*\*\(([^)]*)\)", r"^(\1)", d_str)
                                 d_tmp = bq.re.sub(r"\*\*([+-]?\d+)", r"^\1", d_tmp)
+                                # Quitar asterisco cuando es multiplicación entre coeficiente y variable/parentesis: 15*x -> 15x, 3*(x+1) -> 3(x+1)
+                                try:
+                                    d_tmp = bq.re.sub(r"(\d)\s*\*\s*(?=[A-Za-z(])", r"\1", d_tmp)
+                                    d_tmp = bq.re.sub(r"\)\s*\*\s*(?=[A-Za-z(])", r")", d_tmp)
+                                except Exception:
+                                    pass
                                 d_display = bq.superscriptify(d_tmp)
                             except Exception:
                                 d_display = d_str
