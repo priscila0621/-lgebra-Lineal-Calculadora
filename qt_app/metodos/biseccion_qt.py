@@ -2,6 +2,7 @@
 from math import isfinite
 import re
 import math
+import string
 from dataclasses import dataclass
 from typing import Callable, List, Tuple
 
@@ -40,7 +41,7 @@ from ..theme import (
     gear_icon_preferred,
 )
 from ..settings_qt import open_settings_dialog
-from ..text_utils import superscriptify
+from ..text_utils import superscriptify, _SUP_MAP
 
 # Import plotting libraries when needed. We'll import lazily inside the plotting method
 
@@ -116,11 +117,7 @@ class ExponentInputFilter(QObject):
     - Cualquier otra tecla sale del modo exponente y se procesa normalmente.
     """
 
-    SUPERS = {
-        "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴",
-        "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
-        "+": "⁺", "-": "⁻", "(": "⁽", ")": "⁾", "n": "ⁿ",
-    }
+    SUPERS = dict(_SUP_MAP)
 
     def __init__(self, edit: QLineEdit):
         super().__init__(edit)
@@ -184,9 +181,9 @@ class ExponentInputFilter(QObject):
                 return False
 
             if self.in_exp_mode:
-                if text in self.SUPERS:
-                    self._insert(self.SUPERS[text])
-                    # Si el usuario cierra con ')', mantener modo por si sigue escribiendo
+                sup_char = self.SUPERS.get(text)
+                if sup_char is not None:
+                    self._insert(sup_char)
                     return True
                 # Salir de modo exponente ante teclas no soportadas
                 self.in_exp_mode = False
@@ -266,6 +263,7 @@ def _pretty_to_ascii(expr: str) -> str:
         return expr
 
     s = expr
+    s = s.replace("\u207d", "").replace("\u207e", "")
 
     # 1) Raíz cuadrada: √( … )  -> sqrt( … )
     s = s.replace("√(", "sqrt(")
@@ -274,11 +272,8 @@ def _pretty_to_ascii(expr: str) -> str:
     s = re.sub(r"√\s*([A-Za-z]|\d(?:[\d\.]*))", r"sqrt(\1)", s)
 
     # 2) Potencias con superíndices: secuencia de superíndices tras un término
-    supers_map = str.maketrans({
-        "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4",
-        "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9",
-        "⁺": "+", "⁻": "-", "⁽": "(", "⁾": ")", "ⁿ": "n",
-    })
+    supers_map = {value: key for key, value in _SUP_MAP.items() if len(value) == 1}
+    supers_map = str.maketrans(supers_map)
 
     def _sup_repl(m: re.Match) -> str:
         base = m.group(1)
@@ -290,7 +285,8 @@ def _pretty_to_ascii(expr: str) -> str:
         return f"{base}^({norm})"
 
     # Aplica repetidamente por si hay múltiples ocurrencias
-    pattern = re.compile(r"([A-Za-z0-9\)]+)([⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁽⁾ⁿ]+)")
+    _super_chars = "".join(sorted({value for value in _SUP_MAP.values() if len(value) == 1}))
+    pattern = re.compile(r"([A-Za-z0-9\)]+)([" + re.escape(_super_chars) + r"]+)")
     prev = None
     while prev != s:
         prev = s
@@ -645,12 +641,8 @@ class RootInputCard(QFrame):
                 text = self.function_edit.text() or ""
                 pos = self.function_edit.cursorPosition()
 
-                SUPERS = {
-                    "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴",
-                    "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
-                    "+": "⁺", "-": "⁻", "(": "⁽", ")": "⁾", "n": "ⁿ",
-                }
-                allowed = set("0123456789+-()n")
+                SUPERS = dict(_SUP_MAP)
+                allowed = set("0123456789+-()") | set(string.ascii_letters)
 
                 i = 0
                 new = []
@@ -743,8 +735,8 @@ class RootInputCard(QFrame):
         add_btn("tan", "tan()", cursor_offset=-1, tooltip="Tangente")
         add_btn("ln", "ln()", cursor_offset=-1, tooltip="Logaritmo natural")
         add_btn("log", "log()", cursor_offset=-1, tooltip="Logaritmo base e (math.log)")
-        add_btn("exp", "exp()", cursor_offset=-1, tooltip="Exponencial e^x")
-        add_btn("e^x", "e**()", cursor_offset=-1, tooltip="Plantilla e^x")
+        add_btn("exp", "exp()", cursor_offset=-1, tooltip="Exponencial e\u02e3")
+        add_btn("e\u02e3", "e\u02e3", tooltip="Plantilla e\u02e3")
         add_btn("abs", "abs()", cursor_offset=-1, tooltip="Valor absoluto")
         add_btn("π", "pi", tooltip="Constante pi")
         add_btn("e", "e", tooltip="Constante e")
@@ -771,8 +763,8 @@ class RootInputCard(QFrame):
             add_btn("tan", "tan()", cursor_offset=-1, tooltip="Tangente")
             add_btn("ln", "ln()", cursor_offset=-1, tooltip="Logaritmo natural")
             add_btn("log", "log()", cursor_offset=-1, tooltip="Logaritmo base e (math.log)")
-            add_btn("exp", "exp()", cursor_offset=-1, tooltip="Exponencial e^x")
-            add_btn("e^x", "e**()", cursor_offset=-1, tooltip="Plantilla e^x")
+            add_btn("exp", "exp()", cursor_offset=-1, tooltip="Exponencial e\u02e3")
+            add_btn("e\u02e3", "e\u02e3", tooltip="Plantilla e\u02e3")
             add_btn("abs", "abs()", cursor_offset=-1, tooltip="Valor absoluto")
             add_btn("π", "pi", tooltip="Constante pi")
             add_btn("e", "e", tooltip="Constante e")
