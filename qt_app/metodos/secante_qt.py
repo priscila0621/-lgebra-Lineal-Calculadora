@@ -266,8 +266,21 @@ class MetodoSecanteWindow(bq.MetodoBiseccionWindow):
             x_min, x_max = min(xs), max(xs)
             if x_min == x_max:
                 pad = abs(x_min) * 0.5 if x_min != 0 else 5.0
+                span = pad * 2
+                min_span = 8.0
+                if span < min_span:
+                    mid = x_min
+                    half = min_span / 2
+                    return mid - half, mid + half
                 return x_min - pad, x_max + pad
-            pad = (x_max - x_min) * 0.15
+            span = x_max - x_min
+            min_span = 8.0
+            if span < min_span:
+                mid = (x_min + x_max) / 2
+                half = min_span / 2
+                x_min, x_max = mid - half, mid + half
+                span = min_span
+            pad = max(span * 0.2, 1.0)
             return x_min - pad, x_max + pad
         return -10.0, 10.0
 
@@ -550,17 +563,34 @@ class MetodoSecanteWindow(bq.MetodoBiseccionWindow):
         ax.axhline(0.0, color="black", linewidth=0.9)
 
         ranges = []
+        y_values = []
         for (_idx, _expr, pasos, _raiz, _fc, _it, _ap) in resultados:
             xs = []
             for paso in pasos:
                 xs.extend([paso.x_prev, paso.x_curr, paso.x_next])
+                for y in (paso.fx_prev, paso.fx_curr, 0.0):
+                    if math.isfinite(y):
+                        y_values.append(y)
             if xs:
                 ranges.append((min(xs), max(xs)))
+        try:
+            # Usar el rango ingresado por el usuario para no quedar demasiado acercados al eje.
+            user_min, user_max = self._current_x_range()
+            ranges.append((user_min, user_max))
+        except Exception:
+            pass
+
         if ranges:
             x_min = min(r[0] for r in ranges)
             x_max = max(r[1] for r in ranges)
             span = x_max - x_min
-            pad = (span * 0.12) if span != 0 else (abs(x_min) * 0.2 if x_min != 0 else 1.0)
+            min_span = 4.0
+            if span < min_span:
+                mid = (x_min + x_max) / 2
+                x_min = mid - min_span / 2
+                x_max = mid + min_span / 2
+                span = min_span
+            pad = max(span * 0.12, 0.5)
             x_min -= pad
             x_max += pad
         else:
@@ -591,6 +621,8 @@ class MetodoSecanteWindow(bq.MetodoBiseccionWindow):
                 except Exception:
                     y = float("nan")
                 ys.append(y)
+                if math.isfinite(y):
+                    y_values.append(y)
             color = colors[i % len(colors)] if colors else None
             ax.plot(xs_plot, ys, label=f"f(x) #{idx}", color=color, linewidth=1.6, alpha=0.9)
 
@@ -631,6 +663,15 @@ class MetodoSecanteWindow(bq.MetodoBiseccionWindow):
                 pass
 
         ax.set_xlim(x_min, x_max)
+        if y_values:
+            y_min = min(y_values)
+            y_max = max(y_values)
+            if y_min == y_max:
+                y_min -= 1.0
+                y_max += 1.0
+            y_span = y_max - y_min
+            pad_y = max(y_span * 0.18, 0.6)
+            ax.set_ylim(y_min - pad_y, y_max + pad_y)
         ax.legend()
         ax.set_title("Resultados - Metodo de la secante")
         self._mpl["canvas"].draw_idle()
