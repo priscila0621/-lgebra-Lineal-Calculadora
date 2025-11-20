@@ -90,7 +90,7 @@ class SelectorInicioWindow(QMainWindow):
         head_box.addWidget(title)
 
         subtitle = QLabel(
-            "Suite para álgebra lineal y análisis numérico. "
+            "Suite para álgebra lineal y métodos numéricos. "
             "Explora módulos especializados con resultados claros."
         )
         subtitle.setObjectName("Subtitle")
@@ -117,7 +117,7 @@ class SelectorInicioWindow(QMainWindow):
 
         cards.addWidget(
             self._build_card(
-                title="Análisis Numérico",
+                title="Métodos Numéricos",
                 img_relpath=self._project_path("assets/selector/analisis.png"),
                 on_click=self._open_numerico,
             ),
