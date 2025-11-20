@@ -192,18 +192,23 @@ class MetodoSecanteWindow(bq.MetodoBiseccionWindow):
         self._update_static_labels()
 
     def _add_sign_filter_control(self) -> None:
-        """Inserta un selector para filtrar raices por signo en el panel de formularios."""
+        """Inserta un selector para filtrar raices por signo en la barra superior."""
         try:
             self.sign_filter = QComboBox()
             self.sign_filter.addItem("Todas las raices", "all")
             self.sign_filter.addItem("Solo raices positivas", "positive")
             self.sign_filter.addItem("Solo raices negativas", "negative")
-            row = QHBoxLayout()
-            row.setSpacing(8)
-            row.addWidget(QLabel("Mostrar:"))
-            row.addWidget(self.sign_filter, 1)
-            row.addStretch(1)
-            self.forms_layout.insertLayout(0, row)
+            nav_widget = self.root_count.parentWidget()
+            nav_layout = nav_widget.layout() if nav_widget is not None else None
+            if nav_layout is None:
+                raise RuntimeError("No se encontro el contenedor de la barra superior.")
+            label = QLabel("Mostrar:")
+            insert_pos = nav_layout.indexOf(self.root_count) + 1
+            if insert_pos <= 0:
+                insert_pos = nav_layout.count()
+            nav_layout.insertSpacing(insert_pos, 6)
+            nav_layout.insertWidget(insert_pos + 1, label, 0, Qt.AlignVCenter)
+            nav_layout.insertWidget(insert_pos + 2, self.sign_filter, 0, Qt.AlignVCenter)
         except Exception:
             self.sign_filter = None
 

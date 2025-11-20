@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QSizePolicy,
     QHeaderView,
+    QComboBox,
 )
 
 from . import biseccion_qt as bq
@@ -118,7 +119,29 @@ class MetodoNewtonRaphsonWindow(bq.MetodoBiseccionWindow):
             self.btn_calcular.setText("Calcular Newton-Raphson")
         except Exception:
             pass
+        self._add_sign_filter_control()
         self._update_static_labels()
+
+    def _add_sign_filter_control(self) -> None:
+        """Inserta el selector de raices junto al contador de formularios."""
+        try:
+            self.sign_filter = QComboBox()
+            self.sign_filter.addItem("Todas las raices", "all")
+            self.sign_filter.addItem("Solo raices positivas", "positive")
+            self.sign_filter.addItem("Solo raices negativas", "negative")
+            nav_widget = self.root_count.parentWidget()
+            nav_layout = nav_widget.layout() if nav_widget is not None else None
+            if nav_layout is None:
+                raise RuntimeError("No se encontro el contenedor superior.")
+            label = QLabel("Mostrar:")
+            insert_pos = nav_layout.indexOf(self.root_count) + 1
+            if insert_pos <= 0:
+                insert_pos = nav_layout.count()
+            nav_layout.insertSpacing(insert_pos, 6)
+            nav_layout.insertWidget(insert_pos + 1, label, 0, Qt.AlignVCenter)
+            nav_layout.insertWidget(insert_pos + 2, self.sign_filter, 0, Qt.AlignVCenter)
+        except Exception:
+            self.sign_filter = None
 
     def _update_static_labels(self) -> None:
         replacements = {
@@ -587,12 +610,44 @@ class MetodoNewtonRaphsonWindow(bq.MetodoBiseccionWindow):
             QMessageBox.information(self, "Resultados", "No se encontraron raíces.")
             return
 
+        resultados = self._filter_results_by_sign(resultados)
+        if not resultados:
+            QMessageBox.information(
+                self,
+                "Resultados",
+                "No se encontraron ra�ces que coincidan con el filtro seleccionado.",
+            )
+            return
+
         super()._render_resultados(resultados)
         self._adjust_result_cards(resultados, tol)
         try:
             self._draw_results_on_canvas(resultados)
         except Exception:
             pass
+
+    def _filter_results_by_sign(self, resultados):
+        if not resultados:
+            return resultados
+        try:
+            mode = self.sign_filter.currentData() if getattr(self, "sign_filter", None) is not None else "all"
+        except Exception:
+            mode = "all"
+        if mode not in ("positive", "negative"):
+            return resultados
+        filtered = []
+        for item in resultados:
+            raiz = item[3]
+            try:
+                value = float(raiz)
+            except Exception:
+                filtered.append(item)
+                continue
+            if mode == "positive" and value >= 0:
+                filtered.append(item)
+            elif mode == "negative" and value <= 0:
+                filtered.append(item)
+        return filtered
 
     def _adjust_result_cards(self, resultados, tol) -> None:
         cards = []
