@@ -9,7 +9,7 @@ class MenuInicio:
     """
     Pantalla inicial (Tkinter) con dos opciones grandes:
     - Álgebra Lineal
-    - Análisis Numérico
+    - Métodos Numéricos
 
     Si existen imágenes en assets/selector/algebra.png y
     assets/selector/analisis.png se usan como ilustración.
@@ -72,7 +72,7 @@ class MenuInicio:
         ttk.Label(head, text="Nexus Linear — Calculadora Inteligente",
                   font=("Segoe UI", 18, "bold"), background="#f7e7ea", foreground="#7a3d53").pack(anchor="w")
         ttk.Label(head,
-                  text=("Suite para álgebra lineal y análisis numérico. "
+                  text=("Suite para álgebra lineal y métodos numéricos. "
                         "Explora módulos especializados con resultados claros."),
                   font=("Segoe UI", 10), background="#f7e7ea", foreground="#6b4557",
                   wraplength=520).pack(anchor="w", pady=(4, 0))
@@ -113,7 +113,7 @@ class MenuInicio:
         ttk.Button(frame_a, text="Álgebra Lineal", style="Primary.TButton",
                    command=self._open_algebra, width=18).pack(pady=(6, 6))
 
-        # Tarjeta Análisis Numérico
+        # Tarjeta Métodos Numéricos
         frame_n = ttk.Frame(inner, style="Card.TFrame")
         frame_n.grid(row=0, column=1, padx=36, pady=16)
         panel_n = tk.Frame(frame_n, bg="#ffffff", highlightthickness=1, highlightbackground="#e2d5db")
@@ -121,8 +121,8 @@ class MenuInicio:
         if self._img_analisis is not None:
             tk.Label(panel_n, image=self._img_analisis, bg="#ffffff").pack(padx=18, pady=18)
         else:
-            ttk.Label(panel_n, text="Análisis Numérico", style="CardTitle.TLabel").pack(padx=24, pady=32)
-        ttk.Button(frame_n, text="Análisis Numérico", style="Primary.TButton",
+            ttk.Label(panel_n, text="Métodos Numéricos", style="CardTitle.TLabel").pack(padx=24, pady=32)
+        ttk.Button(frame_n, text="Métodos Numéricos", style="Primary.TButton",
                    command=self._open_numerico, width=18).pack(pady=(6, 6))
 
         # Espaciador inferior para centrar el bloque de tarjetas
@@ -246,7 +246,7 @@ class MenuInicio:
             except Exception:
                 pass
             tb = traceback.format_exc()
-            messagebox.showerror("Error", f"Error al abrir Análisis Numérico: {tb}")
+            messagebox.showerror("Error", f"Error al abrir Métodos Numéricos: {tb}")
 
     def _volver_selector(self, ventana_actual):
         # Mantener compatibilidad si se invoca este flujo

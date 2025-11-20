@@ -13,7 +13,7 @@ def _run_qt():
 def _run_tk():
     import tkinter as tk
     # Cargamos un selector inicial para elegir
-    # entre Álgebra Lineal y Análisis Numérico
+    # entre Álgebra Lineal y Métodos Numéricos
     from menu_inicio import MenuInicio
     root = tk.Tk()
     MenuInicio(root)
